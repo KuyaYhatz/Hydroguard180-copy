@@ -1,0 +1,134 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  role      String
+  fullName  String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Resident {
+  id               String   @id @default(cuid())
+  residentName     String
+  address          String
+  contactNumber    String
+  emergencyContact String
+  householdCount   Int
+  notes            String?  @db.Text
+  status           String   @default("active")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("residents")
+}
+
+model AlertLevel {
+  level          Int      @id
+  name           String
+  risk           String
+  color          String
+  minWaterLevel  Float
+  maxWaterLevel  Float
+  description    String   @db.Text
+  action         String   @db.Text
+  protocols      Json
+
+  @@map("alert_levels")
+}
+
+model WaterMonitoring {
+  id                 String   @id @default(cuid())
+  timestamp          DateTime @default(now())
+  waterLevel         Float
+  waterLevelUnit     String   @default("cm")
+  alertLevel         Int
+  rainfallIndicator  String
+  deviceStatus       String
+  notes              String?  @db.Text
+
+  @@map("water_monitoring")
+  @@index([timestamp])
+}
+
+model Settings {
+  id                String   @id @default(cuid())
+  systemName        String
+  barangay          String
+  city              String
+  logo              String
+  primaryColor      String
+  secondaryColor    String
+  contact           Json
+  alertsEnabled     Boolean  @default(true)
+  sensors           Json
+  calibration       Json
+  updatedAt         DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  timestamp DateTime @default(now())
+  userId    String
+  userName  String
+  action    String
+  target    String
+  details   String   @db.Text
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+  @@index([timestamp])
+  @@index([userId])
+}
+
+model FAQ {
+  id          String   @id @default(cuid())
+  category    String
+  question    String   @db.Text
+  answer      String   @db.Text
+  isPublished Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("faqs")
+  @@index([category])
+  @@index([isPublished])
+}
+
+model Inquiry {
+  id        String    @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String    @db.Text
+  status    String    @default("unread")
+  reply     String?   @db.Text
+  repliedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("inquiries")
+  @@index([status])
+  @@index([createdAt])
+}

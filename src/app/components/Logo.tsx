@@ -1,4 +1,4 @@
-import logo from "figma:asset/1d4f321f8b4e871551b7ad7264cb64d51e35cfb0.png";
+import logo from "../../assets/logo.png";
 
 interface LogoProps {
   className?: string;

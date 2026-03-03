@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getWaterMonitoring, getAlertLevelByLevel, getAlertLevels } from '../../utils/database';
+import { waterMonitoringAPI, alertLevelsAPI } from '../../utils/api';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { BarChart3, TrendingUp, Droplets, AlertTriangle, Info, X } from 'lucide-react';
@@ -7,6 +7,8 @@ import { AnimatePresence, motion } from 'motion/react';
 
 export function Analytics() {
   const [readings, setReadings] = useState<any[]>([]);
+  const [allReadings, setAllReadings] = useState<any[]>([]);
+  const [alertLevels, setAlertLevels] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState({
     start: '',
     end: '',
@@ -27,10 +29,20 @@ export function Analytics() {
     loadData();
   }, []);
 
-  const loadData = () => {
-    const data = getWaterMonitoring();
-    setReadings(data);
-    calculateStats(data);
+  const loadData = async () => {
+    try {
+      const [readingsResponse, levelsData] = await Promise.all([
+        waterMonitoringAPI.getAll({ limit: 10000 }),
+        alertLevelsAPI.getAll(),
+      ]);
+      const readingsData = readingsResponse.data || [];
+      setAllReadings(readingsData);
+      setReadings(readingsData);
+      setAlertLevels(levelsData);
+      calculateStats(readingsData);
+    } catch (error) {
+      console.error('Error loading analytics data:', error);
+    }
   };
 
   const calculateStats = (data: any[]) => {
@@ -77,21 +89,23 @@ export function Analytics() {
 
   const handleFilterByDateRange = () => {
     if (!dateRange.start || !dateRange.end) {
-      loadData();
+      setReadings(allReadings);
+      calculateStats(allReadings);
       return;
     }
 
-    const filtered = readings.filter(r => {
+    const filtered = allReadings.filter(r => {
       const timestamp = new Date(r.timestamp);
       const start = new Date(dateRange.start);
       const end = new Date(dateRange.end);
       return timestamp >= start && timestamp <= end;
     });
 
+    setReadings(filtered);
     calculateStats(filtered);
   };
 
-  const mostFrequentAlertInfo = getAlertLevelByLevel(stats.mostFrequentAlert);
+  const mostFrequentAlertInfo = alertLevels.find(a => a.level === stats.mostFrequentAlert);
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-4">
@@ -122,7 +136,8 @@ export function Analytics() {
             </Button>
             <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => {
               setDateRange({ start: '', end: '' });
-              loadData();
+              setReadings(allReadings);
+              calculateStats(allReadings);
             }}>
               Reset
             </Button>
@@ -191,7 +206,7 @@ export function Analytics() {
         <div className="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex flex-col min-h-0">
           <h3 className="text-sm font-bold text-[#1F2937] mb-3 flex-shrink-0">Alert Level Distribution</h3>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
-            {getAlertLevels().map((alertInfo: any) => {
+            {alertLevels.map((alertInfo: any) => {
               const countKey = `level${alertInfo.level}Count` as keyof typeof stats;
               const count = stats[countKey] as number;
               const pct = ((count / stats.totalRecords) * 100 || 0);

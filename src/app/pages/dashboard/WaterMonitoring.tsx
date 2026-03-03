@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getWaterMonitoring, getAlertLevelByLevel, getAlertLevels, exportToCSV, addWaterReading } from '../../utils/database';
+import { getAlertLevelByLevel, getAlertLevels } from '../../utils/database';
+import { waterMonitoringAPI } from '../../utils/api';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -8,6 +9,7 @@ import { Badge } from '../../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import { Droplets, Download, Filter, Plus, Printer } from 'lucide-react';
+import { format } from 'date-fns';
 
 export function WaterMonitoring() {
   const [readings, setReadings] = useState<any[]>([]);
@@ -15,6 +17,7 @@ export function WaterMonitoring() {
   const [filterLevel, setFilterLevel] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [newReading, setNewReading] = useState({
     waterLevel: '',
     rainfallIndicator: 'None',
@@ -28,11 +31,21 @@ export function WaterMonitoring() {
     applyFilters();
   }, [readings, filterLevel, searchQuery]);
 
-  const loadReadings = () => {
-    const data = getWaterMonitoring().sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-    setReadings(data);
+  const loadReadings = async () => {
+    try {
+      setLoading(true);
+      const response = await waterMonitoringAPI.getAll({ limit: 1000 });
+      const data = response.data || [];
+      const sorted = data.sort((a: any, b: any) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      setReadings(sorted);
+    } catch (error: any) {
+      console.error('Failed to load readings:', error);
+      toast.error(error.message || 'Failed to load water monitoring data');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const applyFilters = () => {
@@ -51,46 +64,177 @@ export function WaterMonitoring() {
     setFilteredReadings(filtered);
   };
 
-  const handleAddReading = (e: React.FormEvent) => {
+  const handleAddReading = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const waterLevel = parseFloat(newReading.waterLevel);
-    
-    // Dynamically determine alert level from centralized database thresholds
-    const levels = getAlertLevels();
-    let alertLevel = 1;
-    for (const level of levels) {
-      if (waterLevel >= level.minWaterLevel && waterLevel <= level.maxWaterLevel) {
-        alertLevel = level.level;
-        break;
-      }
-    }
-    // If above all defined ranges, use the highest level
-    if (waterLevel > Math.max(...levels.map((l: any) => l.maxWaterLevel === 999 ? 0 : l.maxWaterLevel))) {
-      alertLevel = Math.max(...levels.map((l: any) => l.level));
-    }
+    try {
+      setLoading(true);
+      const waterLevel = parseFloat(newReading.waterLevel);
+      
+      // Alert level will be calculated automatically by the backend
+      await waterMonitoringAPI.create({
+        waterLevel,
+        rainfallIndicator: newReading.rainfallIndicator,
+        deviceStatus: 'Online',
+        notes: 'Manual entry',
+      });
 
-    const reading = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      waterLevel,
-      waterLevelUnit: 'cm',
-      alertLevel,
-      rainfallIndicator: newReading.rainfallIndicator,
-      deviceStatus: 'Online',
-      notes: 'Manual entry',
-    };
-
-    addWaterReading(reading);
-    loadReadings();
-    setShowAddDialog(false);
-    setNewReading({ waterLevel: '', rainfallIndicator: 'None' });
-    toast.success('Reading added successfully');
+      await loadReadings();
+      setShowAddDialog(false);
+      setNewReading({ waterLevel: '', rainfallIndicator: 'None' });
+      toast.success('Reading added successfully');
+    } catch (error: any) {
+      console.error('Failed to add reading:', error);
+      toast.error(error.message || 'Failed to add reading');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleExport = () => {
-    exportToCSV(filteredReadings, 'water-monitoring.csv');
-    toast.success('Data exported successfully');
+  const handleExport = async () => {
+    try {
+      // Dynamically import jsPDF
+      const { default: jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const timestamp = format(new Date(), 'MMMM dd, yyyy h:mm a');
+      
+      // Title
+      doc.setFontSize(20);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Water Monitoring Report', pageWidth / 2, 20, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(timestamp, pageWidth / 2, 27, { align: 'center' });
+      doc.text(`Total Records: ${filteredReadings.length}`, pageWidth / 2, 32, { align: 'center' });
+      
+      let yPosition = 45;
+      
+      // Water Monitoring Data Table
+      doc.setFontSize(14);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Monitoring Readings', 14, yPosition);
+      yPosition += 10;
+      
+      const tableData = filteredReadings.map(reading => {
+        const alertInfo = getAlertLevelByLevel(reading.alertLevel);
+        return [
+          format(new Date(reading.timestamp), 'MMM dd, yyyy'),
+          format(new Date(reading.timestamp), 'h:mm a'),
+          `${reading.waterLevel} ${reading.waterLevelUnit || 'm'}`,
+          `Level ${reading.alertLevel} - ${alertInfo?.name || 'Unknown'}`,
+          reading.rainfallIndicator || 'N/A'
+        ];
+      });
+      
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Date', 'Time', 'Water Level', 'Alert Level', 'Rainfall']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [38, 52, 58] },
+        styles: { fontSize: 8 },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 55 },
+          4: { cellWidth: 25 }
+        }
+      });
+      
+      // Calculate summary statistics
+      const waterLevels = filteredReadings.map(r => r.waterLevel);
+      const avgWaterLevel = waterLevels.reduce((sum, level) => sum + level, 0) / waterLevels.length;
+      const maxWaterLevel = Math.max(...waterLevels);
+      const minWaterLevel = Math.min(...waterLevels);
+      
+      // Alert level distribution
+      const alertDistribution: Record<number, number> = {};
+      filteredReadings.forEach(r => {
+        alertDistribution[r.alertLevel] = (alertDistribution[r.alertLevel] || 0) + 1;
+      });
+      
+      const mostFrequentAlert = Object.entries(alertDistribution)
+        .sort((a, b) => b[1] - a[1])[0];
+      
+      // Add new page for summary
+      doc.addPage();
+      yPosition = 20;
+      
+      doc.setFontSize(16);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Summary Statistics', 14, yPosition);
+      yPosition += 15;
+      
+      // Summary table
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Total Readings', filteredReadings.length.toString()],
+          ['Average Water Level', `${avgWaterLevel.toFixed(2)} ${filteredReadings[0]?.waterLevelUnit || 'm'}`],
+          ['Highest Water Level', `${maxWaterLevel.toFixed(2)} ${filteredReadings[0]?.waterLevelUnit || 'm'}`],
+          ['Lowest Water Level', `${minWaterLevel.toFixed(2)} ${filteredReadings[0]?.waterLevelUnit || 'm'}`],
+          ['Most Frequent Alert', mostFrequentAlert ? `Level ${mostFrequentAlert[0]} (${mostFrequentAlert[1]} times)` : 'N/A'],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [38, 52, 58] },
+      });
+      
+      yPosition = (doc as any).lastAutoTable.finalY + 20;
+      
+      // Alert Level Distribution
+      doc.setFontSize(14);
+      doc.text('Alert Level Distribution', 14, yPosition);
+      yPosition += 10;
+      
+      const distributionData = Object.entries(alertDistribution)
+        .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+        .map(([level, count]) => {
+          const alertInfo = getAlertLevelByLevel(parseInt(level));
+          const percentage = ((count / filteredReadings.length) * 100).toFixed(1);
+          return [
+            `Level ${level}`,
+            alertInfo?.name || 'Unknown',
+            count.toString(),
+            `${percentage}%`
+          ];
+        });
+      
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Level', 'Name', 'Count', 'Percentage']],
+        body: distributionData,
+        theme: 'grid',
+        headStyles: { fillColor: [38, 52, 58] },
+      });
+      
+      // Footer on all pages
+      const pageCount = doc.internal.pages.length - 1;
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(
+          `HydroGuard 180 - Page ${i} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+      }
+      
+      // Save the PDF
+      const filename = `water-monitoring-${format(new Date(), 'yyyy-MM-dd-HHmm')}.pdf`;
+      doc.save(filename);
+      toast.success('Water monitoring report exported successfully');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export report');
+    }
   };
 
   const getAlertBadge = (level: number) => {
@@ -126,7 +270,7 @@ export function WaterMonitoring() {
           </Button>
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download size={16} className="mr-1.5" />
-            Export
+            Export PDF
           </Button>
 
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -150,13 +294,16 @@ export function WaterMonitoring() {
                     step="0.1"
                     value={newReading.waterLevel}
                     onChange={(e) => setNewReading({ ...newReading, waterLevel: e.target.value })}
+                    disabled={loading}
                   />
+                  <p className="text-xs text-gray-500 mt-1">Alert level will be calculated automatically</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Rainfall Indicator</label>
                   <Select 
                     value={newReading.rainfallIndicator} 
                     onValueChange={(value) => setNewReading({ ...newReading, rainfallIndicator: value })}
+                    disabled={loading}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -170,10 +317,10 @@ export function WaterMonitoring() {
                   </Select>
                 </div>
                 <div className="flex gap-2">
-                  <Button type="submit" className="flex-1 bg-[#FF6A00] hover:bg-[#E55F00]">
-                    Add Reading
+                  <Button type="submit" className="flex-1 bg-[#FF6A00] hover:bg-[#E55F00]" disabled={loading}>
+                    {loading ? 'Adding...' : 'Add Reading'}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>
+                  <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)} disabled={loading}>
                     Cancel
                   </Button>
                 </div>

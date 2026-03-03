@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Search } from 'lucide-react';
 import {
@@ -8,13 +8,25 @@ import {
   AccordionTrigger,
 } from '../components/ui/accordion';
 import { Input } from '../components/ui/input';
-import { getPublishedFaqs } from '../utils/database';
+import { faqsAPI } from '../utils/api';
 
 export function FAQ() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [publishedFaqs, setPublishedFaqs] = useState<any[]>([]);
 
-  // Pull published FAQs from the centralized database
-  const publishedFaqs = getPublishedFaqs();
+  useEffect(() => {
+    loadFaqs();
+  }, []);
+
+  const loadFaqs = async () => {
+    try {
+      const data = await faqsAPI.getPublic();
+      setPublishedFaqs(data);
+    } catch (error) {
+      console.error('Error loading FAQs:', error);
+      setPublishedFaqs([]);
+    }
+  };
 
   // Group by category
   const faqs = Object.entries(

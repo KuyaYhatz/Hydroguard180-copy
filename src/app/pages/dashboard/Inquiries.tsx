@@ -10,7 +10,7 @@ import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner';
-import { getInquiries, updateInquiry, deleteInquiry, getUnreadInquiriesCount } from '../../utils/database';
+import { inquiriesAPI } from '../../utils/api';
 import { format } from 'date-fns';
 import { ConfirmModal } from '../../components/ConfirmModal';
 
@@ -28,41 +28,59 @@ export function Inquiries() {
     loadInquiries();
   }, []);
 
-  const loadInquiries = () => {
-    const data = getInquiries();
-    setInquiries([...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+  const loadInquiries = async () => {
+    try {
+      const data = await inquiriesAPI.getAll();
+      setInquiries([...data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    } catch (error) {
+      console.error('Error loading inquiries:', error);
+      toast.error('Failed to load inquiries');
+    }
   };
 
-  const handleViewInquiry = (inquiry: any) => {
+  const handleViewInquiry = async (inquiry: any) => {
     if (inquiry.status === 'unread') {
-      updateInquiry(inquiry.id, { status: 'read' });
+      try {
+        await inquiriesAPI.update(inquiry.id, { status: 'read' });
+        await loadInquiries();
+      } catch (error) {
+        console.error('Error updating status:', error);
+      }
     }
     setSelectedInquiry(inquiry);
     setReplyText(inquiry.reply || '');
-    loadInquiries();
   };
 
-  const handleReply = () => {
+  const handleReply = async () => {
     if (!replyText.trim()) {
       toast.error('Please write a reply');
       return;
     }
-    updateInquiry(selectedInquiry.id, {
-      status: 'replied',
-      reply: replyText,
-      repliedAt: new Date().toISOString(),
-    });
-    toast.success('Reply saved successfully');
-    setSelectedInquiry({ ...selectedInquiry, status: 'replied', reply: replyText, repliedAt: new Date().toISOString() });
-    loadInquiries();
+    try {
+      await inquiriesAPI.update(selectedInquiry.id, {
+        status: 'replied',
+        reply: replyText,
+      });
+      toast.success('Reply saved successfully');
+      setSelectedInquiry({ ...selectedInquiry, status: 'replied', reply: replyText, repliedAt: new Date().toISOString() });
+      await loadInquiries();
+    } catch (error) {
+      console.error('Error saving reply:', error);
+      toast.error('Failed to save reply');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    deleteInquiry(id);
-    toast.success('Inquiry deleted');
-    setDeleteConfirm({ open: false, id: '', subject: '' });
-    if (selectedInquiry?.id === id) setSelectedInquiry(null);
-    loadInquiries();
+  const handleDelete = async (id: string) => {
+    try {
+      await inquiriesAPI.delete(id);
+      toast.success('Inquiry deleted');
+      setDeleteConfirm({ open: false, id: '', subject: '' });
+      if (selectedInquiry?.id === id) setSelectedInquiry(null);
+      await loadInquiries();
+    } catch (error) {
+      console.error('Error deleting inquiry:', error);
+      toast.error('Failed to delete inquiry');
+    }
   };
 
   const filteredInquiries = inquiries.filter((inq) => {

@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Save, Plus, Trash2, Settings as SettingsIcon, Bell, Activity, Download, Users, Shield } from 'lucide-react';
+import { Save, Plus, Trash2, Settings as SettingsIcon, Bell, Activity, Download, Users, Shield, Edit2, X } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Switch } from '../../components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
-import { getSettings, updateSettings, addSensor, exportToCSV, getAuditLogs, getWaterMonitoring, getUsers, getResidents } from '../../utils/database';
+import { settingsAPI, auditLogsAPI } from '../../utils/api';
+import { getSettings, getWaterMonitoring, getUsers, getResidents } from '../../utils/database';
 import { format } from 'date-fns';
 
 export function Settings() {
@@ -13,38 +16,61 @@ export function Settings() {
   const [sensors, setSensors] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingSensor, setEditingSensor] = useState<any>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deletingSensor, setDeletingSensor] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    const s = getSettings();
-    const logs = getAuditLogs();
-    setSettings(s);
-    setSensors(s.sensors || []);
-    setAuditLogs(
-      [...logs]
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 15)
-    );
-    setLoading(false);
+  const loadData = async () => {
+    try {
+      const [settingsData, logsData] = await Promise.all([
+        settingsAPI.get(),
+        auditLogsAPI.getAll({ limit: 15 })
+      ]);
+      
+      setSettings(settingsData);
+      setSensors(settingsData.sensors || []);
+      setAuditLogs(logsData.sort((a: any, b: any) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      ));
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      toast.error('Failed to load settings');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleToggleAlerts = (checked: boolean) => {
-    updateSettings({ alertsEnabled: checked });
-    setSettings({ ...settings, alertsEnabled: checked });
-    toast.success(checked ? 'Alerts enabled' : 'Alerts disabled');
+  const handleToggleAlerts = async (checked: boolean) => {
+    try {
+      const updatedSettings = { ...settings, alertsEnabled: checked };
+      await settingsAPI.update(updatedSettings);
+      setSettings(updatedSettings);
+      toast.success(checked ? 'Alerts enabled' : 'Alerts disabled');
+    } catch (error) {
+      console.error('Error updating alerts:', error);
+      toast.error('Failed to update alerts');
+    }
   };
 
-  const handleUpdateCalibration = (field: string, value: number) => {
-    const newCalibration = { ...settings.calibration, [field]: value };
-    updateSettings({ calibration: newCalibration });
-    setSettings({ ...settings, calibration: newCalibration });
-    toast.success('Calibration updated');
+  const handleUpdateCalibration = async (field: string, value: number) => {
+    try {
+      const newCalibration = { ...settings.calibration, [field]: value };
+      const updatedSettings = { ...settings, calibration: newCalibration };
+      await settingsAPI.update(updatedSettings);
+      setSettings(updatedSettings);
+      toast.success('Calibration updated');
+    } catch (error) {
+      console.error('Error updating calibration:', error);
+      toast.error('Failed to update calibration');
+    }
   };
 
-  const handleAddSensor = (e: React.FormEvent) => {
+  const handleAddSensor = async (e: React.FormEvent) => {
     e.preventDefault();
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
@@ -55,30 +81,196 @@ export function Settings() {
       status: 'Active',
       lastCalibration: new Date().toISOString().split('T')[0],
     };
-    addSensor(newSensor);
-    setSensors([...sensors, newSensor]);
-    form.reset();
-    toast.success('Sensor registered successfully');
+    
+    try {
+      const updatedSensors = [...sensors, newSensor];
+      const updatedSettings = { ...settings, sensors: updatedSensors };
+      await settingsAPI.update(updatedSettings);
+      setSensors(updatedSensors);
+      setSettings(updatedSettings);
+      form.reset();
+      toast.success('Sensor registered successfully');
+    } catch (error) {
+      console.error('Error adding sensor:', error);
+      toast.error('Failed to register sensor');
+    }
   };
 
-  const handleBackup = () => {
-    const backupData = {
-      timestamp: new Date().toISOString(),
-      settings: getSettings(),
-      users: getUsers(),
-      residents: getResidents(),
-      waterMonitoring: getWaterMonitoring(),
-      auditLogs: getAuditLogs(),
-    };
+  const handleEditSensor = (sensor: any) => {
+    setEditingSensor({ ...sensor });
+    setEditDialogOpen(true);
+  };
 
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `hydroguard_backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    toast.success('Backup downloaded successfully');
+  const handleDeleteSensor = (sensor: any) => {
+    setDeletingSensor(sensor);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const updatedSensors = sensors.map(s => 
+        s.id === editingSensor.id ? editingSensor : s
+      );
+      const updatedSettings = { ...settings, sensors: updatedSensors };
+      await settingsAPI.update(updatedSettings);
+      setSensors(updatedSensors);
+      setSettings(updatedSettings);
+      setEditDialogOpen(false);
+      setEditingSensor(null);
+      toast.success('Sensor updated successfully');
+    } catch (error) {
+      console.error('Error updating sensor:', error);
+      toast.error('Failed to update sensor');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      const updatedSensors = sensors.filter(s => s.id !== deletingSensor.id);
+      const updatedSettings = { ...settings, sensors: updatedSensors };
+      await settingsAPI.update(updatedSettings);
+      setSensors(updatedSensors);
+      setSettings(updatedSettings);
+      setDeleteDialogOpen(false);
+      setDeletingSensor(null);
+      toast.success('Sensor deleted successfully');
+    } catch (error) {
+      console.error('Error deleting sensor:', error);
+      toast.error('Failed to delete sensor');
+    }
+  };
+
+  const handleBackup = async () => {
+    try {
+      // Dynamically import jsPDF
+      const { default: jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const timestamp = format(new Date(), 'MMMM dd, yyyy h:mm a');
+      
+      // Title
+      doc.setFontSize(20);
+      doc.setTextColor(40, 40, 40);
+      doc.text('HydroGuard System Backup', pageWidth / 2, 20, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(timestamp, pageWidth / 2, 27, { align: 'center' });
+      
+      let yPosition = 40;
+      
+      // System Settings
+      doc.setFontSize(14);
+      doc.setTextColor(40, 40, 40);
+      doc.text('System Settings', 14, yPosition);
+      yPosition += 10;
+      
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Setting', 'Value']],
+        body: [
+          ['System Name', settings?.systemName || 'N/A'],
+          ['Barangay', settings?.barangay || 'N/A'],
+          ['City', settings?.city || 'N/A'],
+          ['Alerts Enabled', settings?.alertsEnabled ? 'Yes' : 'No'],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [38, 52, 58] },
+      });
+      
+      yPosition = (doc as any).lastAutoTable.finalY + 15;
+      
+      // Sensors
+      if (sensors.length > 0) {
+        doc.setFontSize(14);
+        doc.text('Registered Sensors', 14, yPosition);
+        yPosition += 10;
+        
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['ID', 'Name', 'Location', 'Status']],
+          body: sensors.map(s => [
+            s.id,
+            s.name,
+            s.location,
+            s.status
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [38, 52, 58] },
+        });
+        
+        yPosition = (doc as any).lastAutoTable.finalY + 15;
+      }
+      
+      // Users Summary
+      const users = getUsers();
+      if (users.length > 0 && yPosition < 250) {
+        doc.setFontSize(14);
+        doc.text('User Accounts', 14, yPosition);
+        yPosition += 10;
+        
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['Name', 'Email', 'Role']],
+          body: users.slice(0, 10).map((u: any) => [
+            u.fullName,
+            u.email,
+            u.role
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [38, 52, 58] },
+        });
+        
+        yPosition = (doc as any).lastAutoTable.finalY + 15;
+      }
+      
+      // Add new page for audit logs
+      doc.addPage();
+      yPosition = 20;
+      
+      // Recent Audit Logs
+      if (auditLogs.length > 0) {
+        doc.setFontSize(14);
+        doc.text('Recent Audit Logs', 14, yPosition);
+        yPosition += 10;
+        
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['Time', 'User', 'Action', 'Details']],
+          body: auditLogs.slice(0, 20).map(log => [
+            format(new Date(log.timestamp), 'MMM d, h:mm a'),
+            log.userName,
+            log.action,
+            log.details.substring(0, 40) + (log.details.length > 40 ? '...' : '')
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [38, 52, 58] },
+          styles: { fontSize: 8 },
+        });
+      }
+      
+      // Footer on all pages
+      const pageCount = doc.internal.pages.length - 1;
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(
+          `Page ${i} of ${pageCount} | Generated by HydroGuard 180`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+      }
+      
+      doc.save(`HydroGuard_Backup_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Backup downloaded successfully');
+    } catch (error) {
+      console.error('Error generating backup:', error);
+      toast.error('Failed to generate backup');
+    }
   };
 
   if (loading) return <div>Loading...</div>;
@@ -160,19 +352,37 @@ export function Settings() {
                 key={sensor.id}
                 className="flex justify-between items-center p-2.5 border border-gray-100 rounded-lg bg-gray-50/50"
               >
-                <div>
+                <div className="flex-1">
                   <p className="font-medium text-xs text-[#1F2937]">{sensor.name}</p>
                   <p className="text-[10px] text-gray-500">
                     {sensor.location} • {sensor.id}
                   </p>
                 </div>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full ${
-                    sensor.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}
-                >
-                  {sensor.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full ${
+                      sensor.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}
+                  >
+                    {sensor.status}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => handleEditSensor(sensor)}
+                  >
+                    <Edit2 size={14} className="text-blue-600" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => handleDeleteSensor(sensor)}
+                  >
+                    <Trash2 size={14} className="text-red-600" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -253,6 +463,88 @@ export function Settings() {
           )}
         </div>
       </div>
+
+      {/* Edit Sensor Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Sensor</DialogTitle>
+            <DialogDescription>
+              Update sensor information. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Sensor Name</Label>
+              <Input
+                id="edit-name"
+                value={editingSensor?.name || ''}
+                onChange={(e) => setEditingSensor({ ...editingSensor, name: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-location">Location</Label>
+              <Input
+                id="edit-location"
+                value={editingSensor?.location || ''}
+                onChange={(e) => setEditingSensor({ ...editingSensor, location: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <select
+                id="edit-status"
+                className="flex h-9 w-full rounded-md border border-gray-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
+                value={editingSensor?.status || 'Active'}
+                onChange={(e) => setEditingSensor({ ...editingSensor, status: e.target.value })}
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Maintenance">Maintenance</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} className="bg-[#26343A] hover:bg-[#1f2b30]">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Sensor</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this sensor? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-gray-900">{deletingSensor?.name}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {deletingSensor?.location} • {deletingSensor?.id}
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleConfirmDelete} 
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete Sensor
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

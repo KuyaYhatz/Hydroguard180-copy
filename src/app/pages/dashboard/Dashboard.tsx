@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Users, BookUser, Droplets, AlertTriangle, TrendingUp, Activity, Clock } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { getUsers, getResidents, getWaterMonitoring, getCurrentAlertLevel, getLatestWaterReading, getAuditLogs } from '../../utils/database';
+import { usersAPI, residentsAPI, waterMonitoringAPI, auditLogsAPI } from '../../utils/api';
 import { format } from 'date-fns';
 
 export function Dashboard() {
@@ -17,35 +17,48 @@ export function Dashboard() {
   });
 
   useEffect(() => {
-    const users = getUsers();
-    const residents = getResidents();
-    const readings = getWaterMonitoring();
-    const alertLevel = getCurrentAlertLevel();
-    const latest = getLatestWaterReading();
-    const auditLogs = getAuditLogs();
-
-    // Prepare chart data (last 10 readings)
-    const chartData = readings.slice(-10).map(r => ({
-      time: format(new Date(r.timestamp), 'HH:mm'),
-      level: r.waterLevel,
-      alert: r.alertLevel
-    }));
-
-    // Get recent activity (last 5 logs)
-    const recentActivity = auditLogs
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 5);
-
-    setStats({
-      totalUsers: users.length,
-      totalResidents: residents.length,
-      totalReadings: readings.length,
-      currentAlertLevel: alertLevel,
-      latestReading: latest,
-      chartData,
-      recentActivity,
-    });
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      const [users, residents, readingsResponse, logsResponse] = await Promise.all([
+        usersAPI.getAll(),
+        residentsAPI.getAll(),
+        waterMonitoringAPI.getAll({ limit: 50 }),
+        auditLogsAPI.getAll({ limit: 10 }),
+      ]);
+
+      const readings = readingsResponse.data || [];
+      const logs = logsResponse.data || [];
+
+      // Get current alert level and latest reading
+      const alertLevel = readings.length > 0 ? readings[0].alertLevel : null;
+      const latest = readings.length > 0 ? readings[0] : null;
+
+      // Prepare chart data (last 10 readings)
+      const chartData = readings.slice(0, 10).reverse().map((r: any) => ({
+        time: format(new Date(r.timestamp), 'HH:mm'),
+        level: r.waterLevel,
+        alert: r.alertLevel
+      }));
+
+      // Get recent activity (last 5 logs)
+      const recentActivity = logs.slice(0, 5);
+
+      setStats({
+        totalUsers: users.length,
+        totalResidents: residents.length,
+        totalReadings: readings.length,
+        currentAlertLevel: alertLevel,
+        latestReading: latest,
+        chartData,
+        recentActivity,
+      });
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
+  };
 
   const statCards = [
     {

@@ -10,7 +10,8 @@ import { Textarea } from '../components/ui/textarea';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import maplibregl from 'maplibre-gl';
-import { addInquiry, getSettings } from '../utils/database';
+import { inquiriesAPI } from '../utils/api';
+import { getSettings } from '../utils/database';
 
 // Barangay 180 coordinates
 const BRGY_LAT = 14.7633;
@@ -71,13 +72,14 @@ export function Contact() {
     };
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = addInquiry(formData);
-    if (result.success) {
+    try {
+      await inquiriesAPI.create(formData);
       toast.success('Message sent successfully! We will get back to you soon.');
       setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
-    } else {
+    } catch (error) {
+      console.error('Error sending message:', error);
       toast.error('Failed to send message. Please try again later.');
     }
   };

@@ -1,0 +1,208 @@
+const prisma = require('../db');
+
+// Helper function to determine alert level based on water level
+async function calculateAlertLevel(waterLevel) {
+  const alertLevels = await prisma.alertLevel.findMany({
+    orderBy: { level: 'asc' }
+  });
+
+  for (const level of alertLevels) {
+    if (waterLevel >= level.minWaterLevel && waterLevel <= level.maxWaterLevel) {
+      return level.level;
+    }
+  }
+
+  // If above all ranges, return highest level
+  return alertLevels[alertLevels.length - 1].level;
+}
+
+// Get all water monitoring records
+exports.getAllWaterMonitoring = async (req, res) => {
+  try {
+    const { limit = 100, offset = 0, startDate, endDate } = req.query;
+
+    const where = {};
+    
+    // Filter by date range if provided
+    if (startDate || endDate) {
+      where.timestamp = {};
+      if (startDate) where.timestamp.gte = new Date(startDate);
+      if (endDate) where.timestamp.lte = new Date(endDate);
+    }
+
+    const records = await prisma.waterMonitoring.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: parseInt(limit),
+      skip: parseInt(offset)
+    });
+
+    const total = await prisma.waterMonitoring.count({ where });
+
+    res.json({
+      data: records,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
+    });
+  } catch (error) {
+    console.error('Get all water monitoring error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get single water monitoring record
+exports.getWaterMonitoringById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const record = await prisma.waterMonitoring.findUnique({
+      where: { id }
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    res.json(record);
+  } catch (error) {
+    console.error('Get water monitoring error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get latest water monitoring record
+exports.getLatestWaterMonitoring = async (req, res) => {
+  try {
+    const record = await prisma.waterMonitoring.findFirst({
+      orderBy: { timestamp: 'desc' }
+    });
+
+    if (!record) {
+      return res.status(404).json({ error: 'No monitoring data available' });
+    }
+
+    res.json(record);
+  } catch (error) {
+    console.error('Get latest water monitoring error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Create water monitoring record
+exports.createWaterMonitoring = async (req, res) => {
+  try {
+    const { waterLevel, waterLevelUnit, rainfallIndicator, deviceStatus, notes } = req.body;
+
+    if (!waterLevel) {
+      return res.status(400).json({ error: 'Water level is required' });
+    }
+
+    const waterLevelValue = parseFloat(waterLevel);
+    
+    // Automatically calculate alert level based on water level
+    const alertLevel = await calculateAlertLevel(waterLevelValue);
+
+    const record = await prisma.waterMonitoring.create({
+      data: {
+        waterLevel: waterLevelValue,
+        waterLevelUnit: waterLevelUnit || 'cm',
+        alertLevel: alertLevel,
+        rainfallIndicator: rainfallIndicator || 'None',
+        deviceStatus: deviceStatus || 'Online',
+        notes: notes || ''
+      }
+    });
+
+    res.status(201).json(record);
+  } catch (error) {
+    console.error('Create water monitoring error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Update water monitoring record
+exports.updateWaterMonitoring = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { waterLevel, waterLevelUnit, rainfallIndicator, deviceStatus, notes } = req.body;
+
+    const updateData = {};
+
+    // If water level is updated, recalculate alert level
+    if (waterLevel !== undefined) {
+      const waterLevelValue = parseFloat(waterLevel);
+      updateData.waterLevel = waterLevelValue;
+      updateData.alertLevel = await calculateAlertLevel(waterLevelValue);
+    }
+
+    if (waterLevelUnit !== undefined) updateData.waterLevelUnit = waterLevelUnit;
+    if (rainfallIndicator !== undefined) updateData.rainfallIndicator = rainfallIndicator;
+    if (deviceStatus !== undefined) updateData.deviceStatus = deviceStatus;
+    if (notes !== undefined) updateData.notes = notes;
+
+    const record = await prisma.waterMonitoring.update({
+      where: { id },
+      data: updateData
+    });
+
+    res.json(record);
+  } catch (error) {
+    console.error('Update water monitoring error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Delete water monitoring record
+exports.deleteWaterMonitoring = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.waterMonitoring.delete({
+      where: { id }
+    });
+
+    res.json({ message: 'Record deleted successfully' });
+  } catch (error) {
+    console.error('Delete water monitoring error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get statistics
+exports.getWaterMonitoringStats = async (req, res) => {
+  try {
+    const { days = 7 } = req.query;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+
+    const records = await prisma.waterMonitoring.findMany({
+      where: {
+        timestamp: {
+          gte: startDate
+        }
+      },
+      orderBy: { timestamp: 'asc' }
+    });
+
+    const stats = {
+      totalReadings: records.length,
+      averageWaterLevel: records.reduce((sum, r) => sum + r.waterLevel, 0) / records.length,
+      maxWaterLevel: Math.max(...records.map(r => r.waterLevel)),
+      minWaterLevel: Math.min(...records.map(r => r.waterLevel)),
+      alertDistribution: {}
+    };
+
+    // Count alert level distribution
+    records.forEach(r => {
+      stats.alertDistribution[r.alertLevel] = (stats.alertDistribution[r.alertLevel] || 0) + 1;
+    });
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Get water monitoring stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

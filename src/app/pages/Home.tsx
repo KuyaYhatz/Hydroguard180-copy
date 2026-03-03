@@ -6,15 +6,15 @@ import {
   ArrowUpRight, Zap, Bell, CloudRain, Sun, Cloud,
   CloudSnow, CloudLightning, CloudDrizzle, Wind, Thermometer
 } from 'lucide-react';
-import { getCurrentAlertLevel, getLatestWaterReading, getAlertLevels } from '../utils/database';
+import { waterMonitoringAPI, alertLevelsAPI } from '../utils/api';
 import { useEffect, useState, useRef } from 'react';
 import { format } from 'date-fns';
 import CountUp from 'react-countup';
 
-// Hero image from figma asset (referenced in /src/database/assets.json)
-import heroImage from "figma:asset/26346eae31e929cb6c628fc477c93ab33c2317e4.png";
+// Hero image from assets
+import heroImage from "../../assets/hero-image.png";
 // Original City Hall photo for How It Works section
-import cityHallImage from "figma:asset/60ff209bbded03168f382e21a20f38b2b648b76e.png";
+import cityHallImage from "../../assets/city-hall.png";
 
 // Caloocan City coordinates for Open-Meteo
 const CALOOCAN_LAT = 14.6508;
@@ -97,13 +97,40 @@ export function Home() {
   const contentOpacity = useTransform(smoothProgress, [0, 0.7, 1], [1, 0.9, 0.2]);
 
   useEffect(() => {
-    const alert = getCurrentAlertLevel();
-    const reading = getLatestWaterReading();
-    const levels = getAlertLevels();
-    setCurrentAlert(alert);
-    setLatestReading(reading);
-    setAlertLevelsList(levels);
+    loadData();
+    loadWeather();
+  }, []);
 
+  const loadData = async () => {
+    try {
+      const [readingsResponse, levels] = await Promise.all([
+        waterMonitoringAPI.getAll({ limit: 1 }),
+        alertLevelsAPI.getAll(),
+      ]);
+
+      const readings = readingsResponse.data || [];
+      setAlertLevelsList(levels);
+
+      if (readings.length > 0) {
+        const latest = readings[0];
+        setLatestReading(latest);
+        
+        // Find the current alert level based on water level
+        const alert = levels.find(
+          (a: any) => latest.waterLevel >= a.minWaterLevel && latest.waterLevel <= a.maxWaterLevel
+        ) || levels.find((a: any) => a.level === 4);
+        
+        setCurrentAlert(alert);
+      } else {
+        setCurrentAlert(levels.find((a: any) => a.level === 1));
+        setLatestReading(null);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  };
+
+  const loadWeather = () => {
     // Fetch weather from Open-Meteo (free, no API key)
     fetch(
       `https://api.open-meteo.com/v1/forecast?latitude=${CALOOCAN_LAT}&longitude=${CALOOCAN_LON}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&timezone=Asia%2FManila&forecast_days=5`
@@ -128,7 +155,7 @@ export function Home() {
         setWeatherLoading(false);
       })
       .catch(() => setWeatherLoading(false));
-  }, []);
+  };
 
   const getAlertColor = (level: number) => {
     const alertInfo = alertLevels.find((a: any) => a.level === level);

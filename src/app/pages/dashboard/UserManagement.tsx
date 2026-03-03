@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getUsers, addUser, updateUser, deleteUser, permanentDeleteUser, addAuditLog } from '../../utils/database';
+import { usersAPI } from '../../utils/api';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
@@ -36,51 +36,40 @@ export function UserManagement() {
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    setUsers(getUsers());
+  const loadUsers = async () => {
+    try {
+      const data = await usersAPI.getAll();
+      setUsers(data.filter((u: any) => u.status !== 'deleted'));
+    } catch (error) {
+      console.error('Error loading users:', error);
+      toast.error('Failed to load users');
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingUser) {
-      // Update user
-      updateUser(editingUser.id, formData);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'User Updated',
-        target: formData.email,
-        details: `Updated user ${formData.fullName}`,
-      });
-      toast.success('User updated successfully');
-    } else {
-      // Create user
-      const newUser = {
-        id: Date.now().toString(),
-        ...formData,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      addUser(newUser);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'User Created',
-        target: formData.email,
-        details: `Created new user ${formData.fullName}`,
-      });
-      toast.success('User created successfully');
-    }
+    try {
+      if (editingUser) {
+        // Update user
+        await usersAPI.update(editingUser.id, formData);
+        toast.success('User updated successfully');
+      } else {
+        // Create user
+        await usersAPI.create({
+          ...formData,
+          status: 'active',
+        });
+        toast.success('User created successfully');
+      }
 
-    loadUsers();
-    setShowDialog(false);
-    resetForm();
+      await loadUsers();
+      setShowDialog(false);
+      resetForm();
+    } catch (error) {
+      console.error('Error saving user:', error);
+      toast.error(editingUser ? 'Failed to update user' : 'Failed to create user');
+    }
   };
 
   const handleEdit = (user: any) => {
@@ -105,36 +94,23 @@ export function UserManagement() {
     setConfirmModal({ open: true, type: 'delete', id, email, name: targetUser?.fullName || email });
   };
 
-  const executeConfirm = () => {
+  const executeConfirm = async () => {
     const { type, id, email } = confirmModal;
-    if (type === 'archive') {
-      deleteUser(id);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'User Archived',
-        target: email,
-        details: 'User moved to archive',
-      });
-      loadUsers();
-      toast.success('User archived');
-    } else {
-      permanentDeleteUser(id);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'User Permanently Deleted',
-        target: email,
-        details: 'User permanently removed from system',
-      });
-      loadUsers();
-      toast.success('User permanently deleted');
+    try {
+      if (type === 'archive') {
+        await usersAPI.update(id, { status: 'archived' });
+        await loadUsers();
+        toast.success('User archived');
+      } else {
+        await usersAPI.delete(id);
+        await loadUsers();
+        toast.success('User permanently deleted');
+      }
+      setConfirmModal({ open: false, type: 'archive', id: '', email: '', name: '' });
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error(type === 'archive' ? 'Failed to archive user' : 'Failed to delete user');
     }
-    setConfirmModal({ open: false, type: 'archive', id: '', email: '', name: '' });
   };
 
   const handleResetPassword = (email: string) => {

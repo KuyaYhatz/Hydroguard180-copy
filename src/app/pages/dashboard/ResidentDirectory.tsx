@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getResidents, addResident, updateResident, deleteResident, permanentDeleteResident, addAuditLog, exportToCSV } from '../../utils/database';
+import { residentsAPI } from '../../utils/api';
+import { exportToCSV } from '../../utils/database';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
@@ -8,13 +9,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner';
-import { UserPlus, Edit, Archive, Trash2, Search, Download } from 'lucide-react';
+import { UserPlus, Edit, Archive, Trash2, Search, Download, Users, UserCheck, ArchiveIcon } from 'lucide-react';
 import { ConfirmModal } from '../../components/ConfirmModal';
+
+type StatusFilter = 'all' | 'active' | 'archived';
 
 export function ResidentDirectory() {
   const { user: currentUser } = useAuth();
   const [residents, setResidents] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const [showDialog, setShowDialog] = useState(false);
   const [editingResident, setEditingResident] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -34,49 +38,38 @@ export function ResidentDirectory() {
     loadResidents();
   }, []);
 
-  const loadResidents = () => {
-    setResidents(getResidents());
+  const loadResidents = async () => {
+    try {
+      const data = await residentsAPI.getAll();
+      setResidents(data.filter((r: any) => r.status !== 'deleted'));
+    } catch (error) {
+      console.error('Error loading residents:', error);
+      toast.error('Failed to load residents');
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingResident) {
-      updateResident(editingResident.id, formData);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'Resident Updated',
-        target: formData.residentName,
-        details: `Updated resident information`,
-      });
-      toast.success('Resident updated successfully');
-    } else {
-      const newResident = {
-        id: Date.now().toString(),
-        ...formData,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      addResident(newResident);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'Resident Added',
-        target: formData.residentName,
-        details: `Added new resident to directory`,
-      });
-      toast.success('Resident added successfully');
-    }
+    try {
+      if (editingResident) {
+        await residentsAPI.update(editingResident.id, formData);
+        toast.success('Resident updated successfully');
+      } else {
+        await residentsAPI.create({
+          ...formData,
+          status: 'active',
+        });
+        toast.success('Resident added successfully');
+      }
 
-    loadResidents();
-    setShowDialog(false);
-    resetForm();
+      await loadResidents();
+      setShowDialog(false);
+      resetForm();
+    } catch (error) {
+      console.error('Error saving resident:', error);
+      toast.error(editingResident ? 'Failed to update resident' : 'Failed to add resident');
+    }
   };
 
   const handleEdit = (resident: any) => {
@@ -98,36 +91,23 @@ export function ResidentDirectory() {
     setConfirmModal({ open: true, type: 'delete', id, name });
   };
 
-  const executeConfirm = () => {
+  const executeConfirm = async () => {
     const { type, id, name } = confirmModal;
-    if (type === 'archive') {
-      deleteResident(id);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'Resident Archived',
-        target: name,
-        details: 'Resident moved to archive',
-      });
-      loadResidents();
-      toast.success('Resident archived');
-    } else {
-      permanentDeleteResident(id);
-      addAuditLog({
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        userId: currentUser?.id || '',
-        userName: currentUser?.fullName || '',
-        action: 'Resident Permanently Deleted',
-        target: name,
-        details: 'Resident permanently removed from system',
-      });
-      loadResidents();
-      toast.success('Resident permanently deleted');
+    try {
+      if (type === 'archive') {
+        await residentsAPI.update(id, { status: 'archived' });
+        await loadResidents();
+        toast.success('Resident archived');
+      } else {
+        await residentsAPI.delete(id);
+        await loadResidents();
+        toast.success('Resident permanently deleted');
+      }
+      setConfirmModal({ open: false, type: 'archive', id: '', name: '' });
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error(type === 'archive' ? 'Failed to archive resident' : 'Failed to delete resident');
     }
-    setConfirmModal({ open: false, type: 'archive', id: '', name: '' });
   };
 
   const handleExport = () => {
@@ -145,17 +125,33 @@ export function ResidentDirectory() {
     });
   };
 
-  const filteredResidents = residents.filter(
-    (r) =>
-      r.residentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.contactNumber.includes(searchQuery)
-  );
+  const filteredResidents = residents.filter((r) => {
+    // Status filter
+    if (statusFilter === 'active' && r.status !== 'active') return false;
+    if (statusFilter === 'archived' && r.status !== 'archived') return false;
+    
+    // Search filter
+    if (searchQuery) {
+      return (
+        r.residentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.contactNumber.includes(searchQuery)
+      );
+    }
+    
+    return true;
+  });
+
+  const counts = {
+    all: residents.length,
+    active: residents.filter(r => r.status === 'active').length,
+    archived: residents.filter(r => r.status === 'archived').length,
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-4 lg:overflow-hidden overflow-y-auto custom-scrollbar">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 flex-shrink-0">
-        
+        <h2 className="text-xl font-semibold text-gray-800">Resident Directory</h2>
 
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleExport}>
@@ -222,6 +218,57 @@ export function ResidentDirectory() {
               </form>
             </DialogContent>
           </Dialog>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-1 flex-shrink-0">
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            variant={statusFilter === 'all' ? 'default' : 'ghost'}
+            onClick={() => setStatusFilter('all')}
+            className={`flex-1 ${statusFilter === 'all' ? 'bg-[#FF6A00] hover:bg-[#E55F00]' : ''}`}
+          >
+            <Users size={16} className="mr-1.5" />
+            All
+            <Badge 
+              variant="secondary" 
+              className={`ml-2 ${statusFilter === 'all' ? 'bg-white/20 text-white' : ''}`}
+            >
+              {counts.all}
+            </Badge>
+          </Button>
+          <Button
+            size="sm"
+            variant={statusFilter === 'active' ? 'default' : 'ghost'}
+            onClick={() => setStatusFilter('active')}
+            className={`flex-1 ${statusFilter === 'active' ? 'bg-[#FF6A00] hover:bg-[#E55F00]' : ''}`}
+          >
+            <UserCheck size={16} className="mr-1.5" />
+            Active
+            <Badge 
+              variant="secondary" 
+              className={`ml-2 ${statusFilter === 'active' ? 'bg-white/20 text-white' : ''}`}
+            >
+              {counts.active}
+            </Badge>
+          </Button>
+          <Button
+            size="sm"
+            variant={statusFilter === 'archived' ? 'default' : 'ghost'}
+            onClick={() => setStatusFilter('archived')}
+            className={`flex-1 ${statusFilter === 'archived' ? 'bg-[#FF6A00] hover:bg-[#E55F00]' : ''}`}
+          >
+            <ArchiveIcon size={16} className="mr-1.5" />
+            Archived
+            <Badge 
+              variant="secondary" 
+              className={`ml-2 ${statusFilter === 'archived' ? 'bg-white/20 text-white' : ''}`}
+            >
+              {counts.archived}
+            </Badge>
+          </Button>
         </div>
       </div>
 

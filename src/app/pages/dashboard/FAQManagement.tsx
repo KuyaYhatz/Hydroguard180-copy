@@ -10,13 +10,14 @@ import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { toast } from 'sonner';
-import { getFaqs, addFaq, updateFaq, deleteFaq } from '../../utils/database';
+import { faqsAPI } from '../../utils/api';
 import { ConfirmModal } from '../../components/ConfirmModal';
 
 const CATEGORIES = ['Flood Monitoring', 'Alert System', 'Evacuation', 'General', 'Registration'];
 
 export function FAQManagement() {
   const [faqs, setFaqs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'published' | 'draft'>('all');
@@ -36,33 +37,45 @@ export function FAQManagement() {
     loadFaqs();
   }, []);
 
-  const loadFaqs = () => {
-    setFaqs(getFaqs());
+  const loadFaqs = async () => {
+    try {
+      setLoading(true);
+      const data = await faqsAPI.getAll();
+      setFaqs(data);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load FAQs');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.question.trim() || !formData.answer.trim()) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    if (editingFaq) {
-      updateFaq(editingFaq.id, formData);
-      toast.success('FAQ updated successfully');
-    } else {
-      addFaq({
-        id: `faq-${Date.now()}`,
-        ...formData,
-        order: faqs.length + 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      toast.success('FAQ added successfully');
-    }
+    try {
+      setLoading(true);
+      if (editingFaq) {
+        await faqsAPI.update(editingFaq.id, formData);
+        toast.success('FAQ updated successfully');
+      } else {
+        await faqsAPI.create({
+          ...formData,
+          order: faqs.length + 1,
+        });
+        toast.success('FAQ added successfully');
+      }
 
-    resetForm();
-    loadFaqs();
+      resetForm();
+      await loadFaqs();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save FAQ');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEdit = (faq: any) => {
@@ -76,17 +89,31 @@ export function FAQManagement() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
-    deleteFaq(id);
-    toast.success('FAQ deleted');
-    setDeleteConfirm({ open: false, id: '', question: '' });
-    loadFaqs();
+  const handleDelete = async (id: string) => {
+    try {
+      setLoading(true);
+      await faqsAPI.delete(id);
+      toast.success('FAQ deleted');
+      setDeleteConfirm({ open: false, id: '', question: '' });
+      await loadFaqs();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete FAQ');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleTogglePublish = (faq: any) => {
-    updateFaq(faq.id, { isPublished: !faq.isPublished });
-    toast.success(faq.isPublished ? 'FAQ unpublished' : 'FAQ published');
-    loadFaqs();
+  const handleTogglePublish = async (faq: any) => {
+    try {
+      setLoading(true);
+      await faqsAPI.togglePublish(faq.id);
+      toast.success(faq.isPublished ? 'FAQ unpublished' : 'FAQ published');
+      await loadFaqs();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to toggle publish status');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -203,7 +230,8 @@ export function FAQManagement() {
                 <div className="flex items-center gap-0 shrink-0">
                   <button
                     onClick={() => handleTogglePublish(faq)}
-                    className="p-1 rounded hover:bg-gray-200/60 transition-colors"
+                    disabled={loading}
+                    className="p-1 rounded hover:bg-gray-200/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title={faq.isPublished ? 'Unpublish' : 'Publish'}
                   >
                     {faq.isPublished ? (
@@ -214,14 +242,16 @@ export function FAQManagement() {
                   </button>
                   <button
                     onClick={() => handleEdit(faq)}
-                    className="p-1 rounded hover:bg-blue-50 transition-colors"
+                    disabled={loading}
+                    className="p-1 rounded hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Edit"
                   >
                     <Pencil size={13} className="text-blue-500" />
                   </button>
                   <button
                     onClick={() => setDeleteConfirm({ open: true, id: faq.id, question: faq.question })}
-                    className="p-1 rounded hover:bg-red-50 transition-colors"
+                    disabled={loading}
+                    className="p-1 rounded hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Delete"
                   >
                     <Trash2 size={13} className="text-red-400" />
@@ -246,7 +276,8 @@ export function FAQManagement() {
                 <div className="flex items-center gap-1 border-t border-gray-100 pt-2 -mx-1">
                   <button
                     onClick={() => handleTogglePublish(faq)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition-colors text-xs text-gray-500"
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-gray-100 transition-colors text-xs text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {faq.isPublished ? (
                       <><EyeOff size={14} /> Hide</>
@@ -256,14 +287,16 @@ export function FAQManagement() {
                   </button>
                   <button
                     onClick={() => handleEdit(faq)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition-colors text-xs text-blue-600"
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-blue-50 transition-colors text-xs text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Pencil size={14} /> Edit
                   </button>
                   <div className="flex-1" />
                   <button
                     onClick={() => setDeleteConfirm({ open: true, id: faq.id, question: faq.question })}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-red-50 transition-colors text-xs text-red-500"
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-red-50 transition-colors text-xs text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 size={14} /> Delete
                   </button>
@@ -326,11 +359,11 @@ export function FAQManagement() {
               />
             </div>
             <div className="flex gap-3 pt-2">
-              <Button type="submit" className="bg-[#FF6A00] hover:bg-[#E55F00] flex items-center gap-2">
+              <Button type="submit" disabled={loading} className="bg-[#FF6A00] hover:bg-[#E55F00] flex items-center gap-2">
                 <Save size={16} />
-                {editingFaq ? 'Update FAQ' : 'Save FAQ'}
+                {loading ? 'Saving...' : (editingFaq ? 'Update FAQ' : 'Save FAQ')}
               </Button>
-              <Button type="button" variant="outline" onClick={resetForm}>
+              <Button type="button" variant="outline" onClick={resetForm} disabled={loading}>
                 Cancel
               </Button>
             </div>

@@ -11,12 +11,13 @@ export function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.username.trim() || !formData.password.trim()) {
@@ -24,13 +25,20 @@ export function Login() {
       return;
     }
 
-    const result = login(formData.username, formData.password);
-    
-    if (result.success) {
-      toast.success('Login successful! Redirecting to dashboard...');
-      navigate('/dashboard');
-    } else {
-      toast.error(result.error || 'Invalid credentials. Please try again.');
+    try {
+      setLoading(true);
+      const result = await login(formData.username, formData.password);
+      
+      if (result.success) {
+        toast.success('Login successful! Redirecting to dashboard...');
+        navigate('/dashboard');
+      } else {
+        toast.error(result.error || 'Invalid credentials. Please try again.');
+      }
+    } catch (error) {
+      toast.error('An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -101,8 +109,8 @@ export function Login() {
               </p>
             </div>
 
-            <Button type="submit" className="w-full bg-[#FF6A00] hover:bg-[#E55F00]">
-              Login
+            <Button type="submit" className="w-full bg-[#FF6A00] hover:bg-[#E55F00]" disabled={loading}>
+              {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
 

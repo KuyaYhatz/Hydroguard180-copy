@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getUsers } from '../utils/database';
+import { authAPI } from '../utils/api';
 
 export type UserRole = 'Super Admin' | 'Admin' | 'Staff';
 
@@ -14,7 +14,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => { success: boolean; error?: string };
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
   hasRole: (...roles: UserRole[]) => boolean;
@@ -27,54 +27,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedUser = localStorage.getItem('hydroguard_user');
-    if (storedUser) {
+    const token = localStorage.getItem('hydroguard_token');
+    if (storedUser && token) {
       try {
         const parsed = JSON.parse(storedUser);
-        // Validate that the stored user still exists and is active
-        const valid = getUsers().find(
-          (u) => u.id === parsed.id && u.status === 'active'
-        );
-        if (valid) {
-          setUser(parsed);
-        } else {
-          localStorage.removeItem('hydroguard_user');
-        }
+        setUser(parsed);
       } catch {
         localStorage.removeItem('hydroguard_user');
+        localStorage.removeItem('hydroguard_token');
       }
     }
   }, []);
 
-  const login = (username: string, password: string): { success: boolean; error?: string } => {
-    const allUsers = getUsers();
-    const foundUser = allUsers.find(
-      (u: any) => (u.username === username || u.email === username) && u.password === password
-    );
-
-    if (!foundUser) {
-      return { success: false, error: 'Invalid username or password.' };
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await authAPI.login(username, password);
+      
+      const userSession: User = {
+        id: response.user.id,
+        username: response.user.username,
+        email: response.user.email,
+        role: response.user.role as UserRole,
+        fullName: response.user.fullName,
+        status: 'active',
+      };
+      
+      setUser(userSession);
+      localStorage.setItem('hydroguard_user', JSON.stringify(userSession));
+      localStorage.setItem('hydroguard_token', response.token);
+      return { success: true };
+    } catch (error: any) {
+      console.error('Login error:', error);
+      return { success: false, error: error.message || 'Login failed. Please try again.' };
     }
-
-    if (foundUser.status !== 'active') {
-      return { success: false, error: 'Your account has been deactivated. Contact an administrator.' };
-    }
-
-    const userSession: User = {
-      id: foundUser.id,
-      username: foundUser.username,
-      email: foundUser.email,
-      role: foundUser.role as UserRole,
-      fullName: foundUser.fullName,
-      status: foundUser.status,
-    };
-    setUser(userSession);
-    localStorage.setItem('hydroguard_user', JSON.stringify(userSession));
-    return { success: true };
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('hydroguard_user');
+    localStorage.removeItem('hydroguard_token');
+    // Optionally call the API logout endpoint
+    authAPI.logout().catch(() => {
+      // Ignore errors on logout
+    });
   };
 
   const hasRole = (...roles: UserRole[]) => {
