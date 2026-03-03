@@ -1,0 +1,28 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+@media print {
+  aside, header, button, .no-print {
+    display: none !important;
+  }
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    background-color: white;
+  }
+  /* Ensure table fits */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+  }
+}

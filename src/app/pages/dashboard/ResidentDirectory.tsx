@@ -1,0 +1,366 @@
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { getResidents, addResident, updateResident, deleteResident, permanentDeleteResident, addAuditLog, exportToCSV } from '../../utils/database';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import { Badge } from '../../components/ui/badge';
+import { toast } from 'sonner';
+import { UserPlus, Edit, Archive, Trash2, Search, Download } from 'lucide-react';
+import { ConfirmModal } from '../../components/ConfirmModal';
+
+export function ResidentDirectory() {
+  const { user: currentUser } = useAuth();
+  const [residents, setResidents] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingResident, setEditingResident] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    residentName: '',
+    address: '',
+    contactNumber: '',
+    notes: '',
+  });
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    type: 'archive' | 'delete';
+    id: string;
+    name: string;
+  }>({ open: false, type: 'archive', id: '', name: '' });
+
+  useEffect(() => {
+    loadResidents();
+  }, []);
+
+  const loadResidents = () => {
+    setResidents(getResidents());
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (editingResident) {
+      updateResident(editingResident.id, formData);
+      addAuditLog({
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        userId: currentUser?.id || '',
+        userName: currentUser?.fullName || '',
+        action: 'Resident Updated',
+        target: formData.residentName,
+        details: `Updated resident information`,
+      });
+      toast.success('Resident updated successfully');
+    } else {
+      const newResident = {
+        id: Date.now().toString(),
+        ...formData,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      addResident(newResident);
+      addAuditLog({
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        userId: currentUser?.id || '',
+        userName: currentUser?.fullName || '',
+        action: 'Resident Added',
+        target: formData.residentName,
+        details: `Added new resident to directory`,
+      });
+      toast.success('Resident added successfully');
+    }
+
+    loadResidents();
+    setShowDialog(false);
+    resetForm();
+  };
+
+  const handleEdit = (resident: any) => {
+    setEditingResident(resident);
+    setFormData({
+      residentName: resident.residentName,
+      address: resident.address,
+      contactNumber: resident.contactNumber,
+      notes: resident.notes,
+    });
+    setShowDialog(true);
+  };
+
+  const handleArchive = (id: string, name: string) => {
+    setConfirmModal({ open: true, type: 'archive', id, name });
+  };
+
+  const handlePermanentDelete = (id: string, name: string) => {
+    setConfirmModal({ open: true, type: 'delete', id, name });
+  };
+
+  const executeConfirm = () => {
+    const { type, id, name } = confirmModal;
+    if (type === 'archive') {
+      deleteResident(id);
+      addAuditLog({
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        userId: currentUser?.id || '',
+        userName: currentUser?.fullName || '',
+        action: 'Resident Archived',
+        target: name,
+        details: 'Resident moved to archive',
+      });
+      loadResidents();
+      toast.success('Resident archived');
+    } else {
+      permanentDeleteResident(id);
+      addAuditLog({
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        userId: currentUser?.id || '',
+        userName: currentUser?.fullName || '',
+        action: 'Resident Permanently Deleted',
+        target: name,
+        details: 'Resident permanently removed from system',
+      });
+      loadResidents();
+      toast.success('Resident permanently deleted');
+    }
+    setConfirmModal({ open: false, type: 'archive', id: '', name: '' });
+  };
+
+  const handleExport = () => {
+    exportToCSV(residents, 'resident-directory.csv');
+    toast.success('Data exported successfully');
+  };
+
+  const resetForm = () => {
+    setEditingResident(null);
+    setFormData({
+      residentName: '',
+      address: '',
+      contactNumber: '',
+      notes: '',
+    });
+  };
+
+  const filteredResidents = residents.filter(
+    (r) =>
+      r.residentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.contactNumber.includes(searchQuery)
+  );
+
+  return (
+    <div className="flex flex-col h-full min-h-0 gap-4 lg:overflow-hidden overflow-y-auto custom-scrollbar">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 flex-shrink-0">
+        
+
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download size={16} className="mr-1.5" />
+            Export
+          </Button>
+          
+          <Dialog open={showDialog} onOpenChange={(open) => {
+            setShowDialog(open);
+            if (!open) resetForm();
+          }}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="bg-[#FF6A00] hover:bg-[#E55F00]">
+                <UserPlus size={16} className="mr-1.5" />
+                Add Resident
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{editingResident ? 'Edit Resident' : 'Add New Resident'}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Resident Name *</label>
+                  <Input
+                    required
+                    value={formData.residentName}
+                    onChange={(e) => setFormData({ ...formData, residentName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
+                  <Input
+                    required
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number *</label>
+                  <Input
+                    required
+                    value={formData.contactNumber}
+                    onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
+                    placeholder="09XX XXX XXXX"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <Textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit" className="flex-1 bg-[#FF6A00] hover:bg-[#E55F00]">
+                    {editingResident ? 'Update' : 'Add Resident'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 px-4 py-2.5 flex-shrink-0">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+          <Input
+            type="text"
+            placeholder="Search residents..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-8 text-sm"
+          />
+        </div>
+      </div>
+
+      {/* Residents Table — desktop only */}
+      <div className="hidden lg:flex flex-1 min-h-0 bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden flex-col">
+        <div className="overflow-auto flex-1 min-h-0 custom-scrollbar">
+          <Table className="min-w-[500px]">
+            <TableHeader className="sticky top-0 bg-white z-10">
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredResidents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-gray-500">
+                    No residents found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredResidents.map((resident) => (
+                  <TableRow key={resident.id}>
+                    <TableCell className="font-medium">{resident.residentName}</TableCell>
+                    <TableCell>{resident.address}</TableCell>
+                    <TableCell>{resident.contactNumber}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(resident)}
+                        >
+                          <Edit size={16} />
+                        </Button>
+                        {resident.status === 'active' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleArchive(resident.id, resident.residentName)}
+                          >
+                            <Archive size={16} />
+                          </Button>
+                        )}
+                        {resident.status === 'archived' && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handlePermanentDelete(resident.id, resident.residentName)}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {/* Residents Cards — mobile only */}
+      <div className="lg:hidden space-y-2 pb-4">
+        {filteredResidents.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center">
+            <UserPlus className="mx-auto text-gray-300 mb-2" size={40} />
+            <p className="text-sm text-gray-500">No residents found</p>
+          </div>
+        ) : (
+          filteredResidents.map((resident) => (
+            <div
+              key={resident.id}
+              className="bg-white rounded-lg shadow-sm border border-gray-100 p-3.5"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-[#1F2937] truncate">{resident.residentName}</h4>
+                  <p className="text-xs text-gray-500 mt-0.5">{resident.address}</p>
+                </div>
+                {resident.status === 'archived' && (
+                  <Badge variant="outline" className="text-[10px] shrink-0">Archived</Badge>
+                )}
+              </div>
+              <p className="text-xs text-gray-600 mb-3">{resident.contactNumber}</p>
+              {resident.notes && (
+                <p className="text-[11px] text-gray-400 mb-3 line-clamp-2">{resident.notes}</p>
+              )}
+              <div className="flex gap-2 pt-2 border-t border-gray-100">
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => handleEdit(resident)}>
+                  <Edit size={14} className="mr-1" /> Edit
+                </Button>
+                {resident.status === 'active' && (
+                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => handleArchive(resident.id, resident.residentName)}>
+                    <Archive size={14} className="mr-1" /> Archive
+                  </Button>
+                )}
+                {resident.status === 'archived' && (
+                  <Button size="sm" variant="destructive" className="flex-1 h-8 text-xs" onClick={() => handlePermanentDelete(resident.id, resident.residentName)}>
+                    <Trash2 size={14} className="mr-1" /> Delete
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <ConfirmModal
+        open={confirmModal.open}
+        onClose={() => setConfirmModal({ open: false, type: 'archive', id: '', name: '' })}
+        onConfirm={executeConfirm}
+        title={confirmModal.type === 'archive' ? 'Archive Resident' : 'Permanently Delete Resident'}
+        description={
+          confirmModal.type === 'archive'
+            ? 'This resident will be moved to the archive. You can restore them later.'
+            : 'This action cannot be undone. The resident will be permanently removed from the system.'
+        }
+        detail={confirmModal.name}
+        confirmLabel={confirmModal.type === 'archive' ? 'Archive' : 'Delete Permanently'}
+        variant={confirmModal.type === 'archive' ? 'warning' : 'danger'}
+      />
+    </div>
+  );
+}

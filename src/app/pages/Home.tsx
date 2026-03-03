@@ -1,0 +1,636 @@
+import { Link } from 'react-router';
+import { motion, useInView, useScroll, useTransform, useSpring } from 'motion/react';
+import {
+  BookOpen, Phone, Shield, Droplets, Users,
+  ChevronRight, Waves, Clock, MapPin,
+  ArrowUpRight, Zap, Bell, CloudRain, Sun, Cloud,
+  CloudSnow, CloudLightning, CloudDrizzle, Wind, Thermometer
+} from 'lucide-react';
+import { getCurrentAlertLevel, getLatestWaterReading, getAlertLevels } from '../utils/database';
+import { useEffect, useState, useRef } from 'react';
+import { format } from 'date-fns';
+import CountUp from 'react-countup';
+
+// Hero image from figma asset (referenced in /src/database/assets.json)
+import heroImage from "figma:asset/26346eae31e929cb6c628fc477c93ab33c2317e4.png";
+// Original City Hall photo for How It Works section
+import cityHallImage from "figma:asset/60ff209bbded03168f382e21a20f38b2b648b76e.png";
+
+// Caloocan City coordinates for Open-Meteo
+const CALOOCAN_LAT = 14.6508;
+const CALOOCAN_LON = 120.9667;
+
+// WMO Weather codes to icon/label mapping
+function getWeatherInfo(code: number) {
+  if (code === 0) return { icon: Sun, label: 'Clear Sky', color: '#FACC15' };
+  if (code <= 3) return { icon: Cloud, label: 'Partly Cloudy', color: '#94A3B8' };
+  if (code <= 49) return { icon: Cloud, label: 'Foggy', color: '#94A3B8' };
+  if (code <= 57) return { icon: CloudDrizzle, label: 'Drizzle', color: '#60A5FA' };
+  if (code <= 67) return { icon: CloudRain, label: 'Rainy', color: '#3B82F6' };
+  if (code <= 77) return { icon: CloudSnow, label: 'Snow', color: '#CBD5E1' };
+  if (code <= 82) return { icon: CloudRain, label: 'Rain Showers', color: '#2563EB' };
+  if (code <= 86) return { icon: CloudSnow, label: 'Snow Showers', color: '#CBD5E1' };
+  if (code <= 99) return { icon: CloudLightning, label: 'Thunderstorm', color: '#F59E0B' };
+  return { icon: Cloud, label: 'Unknown', color: '#94A3B8' };
+}
+
+// Animated counter wrapper
+function AnimatedStat({ end, suffix = '', prefix = '' }: { end: number; suffix?: string; prefix?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true, margin: '-50px' });
+  return (
+    <span ref={ref}>
+      {isInView ? (
+        <CountUp end={end} duration={2.5} separator="," prefix={prefix} suffix={suffix} />
+      ) : '0'}
+    </span>
+  );
+}
+
+// Section wrapper
+function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
+  return (
+    <section id={id} className={`relative ${className}`}>
+      {children}
+    </section>
+  );
+}
+
+interface WeatherData {
+  temperature: number;
+  apparentTemp: number;
+  humidity: number;
+  windSpeed: number;
+  weatherCode: number;
+  precipitation: number;
+  daily: {
+    tempMax: number;
+    tempMin: number;
+    precipSum: number;
+    weatherCode: number;
+    date: string;
+  }[];
+}
+
+export function Home() {
+  const [currentAlert, setCurrentAlert] = useState<any>(null);
+  const [latestReading, setLatestReading] = useState<any>(null);
+  const [alertLevels, setAlertLevelsList] = useState<any[]>([]);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+
+  // Parallax scroll for hero background
+  const heroRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start'],
+  });
+  // Smooth out the raw scroll progress with a spring for buttery motion
+  const smoothProgress = useSpring(scrollYProgress, { stiffness: 80, damping: 30, mass: 0.5 });
+  // Background image: subtle vertical shift + scale
+  const heroImgY = useTransform(smoothProgress, [0, 1], ['0%', '10%']);
+  const heroScale = useTransform(smoothProgress, [0, 1], [1, 1.03]);
+  // Overlays fade stronger as you scroll
+  const overlayOpacity = useTransform(smoothProgress, [0, 0.5, 1], [0.75, 0.85, 1]);
+  // Content layer moves up at a different rate (multi-layer depth)
+  const contentY = useTransform(smoothProgress, [0, 1], ['0px', '-30px']);
+  const contentOpacity = useTransform(smoothProgress, [0, 0.7, 1], [1, 0.9, 0.2]);
+
+  useEffect(() => {
+    const alert = getCurrentAlertLevel();
+    const reading = getLatestWaterReading();
+    const levels = getAlertLevels();
+    setCurrentAlert(alert);
+    setLatestReading(reading);
+    setAlertLevelsList(levels);
+
+    // Fetch weather from Open-Meteo (free, no API key)
+    fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${CALOOCAN_LAT}&longitude=${CALOOCAN_LON}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&timezone=Asia%2FManila&forecast_days=5`
+    )
+      .then(res => res.json())
+      .then(data => {
+        setWeather({
+          temperature: data.current.temperature_2m,
+          apparentTemp: data.current.apparent_temperature,
+          humidity: data.current.relative_humidity_2m,
+          windSpeed: data.current.wind_speed_10m,
+          weatherCode: data.current.weather_code,
+          precipitation: data.current.precipitation,
+          daily: data.daily.time.map((date: string, i: number) => ({
+            date,
+            tempMax: data.daily.temperature_2m_max[i],
+            tempMin: data.daily.temperature_2m_min[i],
+            precipSum: data.daily.precipitation_sum[i],
+            weatherCode: data.daily.weather_code[i],
+          })),
+        });
+        setWeatherLoading(false);
+      })
+      .catch(() => setWeatherLoading(false));
+  }, []);
+
+  const getAlertColor = (level: number) => {
+    const alertInfo = alertLevels.find((a: any) => a.level === level);
+    return alertInfo?.color || '#22C55E';
+  };
+
+  const containerVariants = { hidden: {}, visible: { transition: { staggerChildren: 0.12 } } };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 24 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
+  };
+
+  const currentWeather = weather ? getWeatherInfo(weather.weatherCode) : null;
+  const CurrentWeatherIcon = currentWeather?.icon ?? Cloud;
+
+  return (
+    <div className="overflow-x-hidden bg-gray-50">
+      {/* ─── HERO ─── */}
+      <section ref={heroRef} className="relative min-h-[100vh] flex items-end overflow-hidden">
+        {/* Full-bleed background — Caloocan City Hall with parallax */}
+        <motion.div className="absolute inset-0" style={{ y: heroImgY, scale: heroScale }}>
+          <img
+            src={heroImage}
+            alt="Lungsod ng Caloocan City Hall"
+            className="w-full h-[120%] object-cover object-[center_70%] brightness-[0.85]"
+          />
+        </motion.div>
+        {/* Multi-layer overlays for depth — darken as you scroll */}
+        <motion.div className="absolute inset-0" style={{ opacity: overlayOpacity }}>
+          <div className="absolute inset-0 bg-gradient-to-t from-[#26343A] via-[#26343A]/60 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#26343A]/40 to-transparent" />
+        </motion.div>
+        {/* Bottom seamless blend */}
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-gray-50 to-transparent" />
+
+        {/* Ambient light effects */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <motion.div
+            className="absolute top-1/4 right-1/4 w-[400px] h-[400px] bg-[#FF6A00]/10 rounded-full blur-[150px]"
+            animate={{ opacity: [0.15, 0.3, 0.15] }}
+            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+          />
+          <motion.div
+            className="absolute bottom-1/3 left-1/6 w-[300px] h-[300px] bg-blue-500/8 rounded-full blur-[120px]"
+            animate={{ opacity: [0.1, 0.2, 0.1] }}
+            transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+          />
+        </div>
+
+        {/* Content positioned at bottom, overlapping the photo */}
+        <motion.div className="relative w-full z-10 pb-36" style={{ y: contentY, opacity: contentOpacity }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Location tag */}
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="flex items-center gap-3 mb-6"
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-full">
+                <MapPin size={13} className="text-[#FF6A00]" />
+                <span className="text-sm text-gray-300">Barangay 180, Caloocan City</span>
+              </div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-full">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                </span>
+                <span className="text-sm text-gray-300">Live</span>
+              </div>
+            </motion.div>
+
+            {/* Title */}
+            <div className="overflow-hidden mb-4">
+              <motion.h1
+                className="text-5xl md:text-7xl lg:text-8xl font-bold text-white tracking-tight leading-[1.02]"
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.9, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              >
+                Hydro Guard
+              </motion.h1>
+            </div>
+            <div className="overflow-hidden mb-8">
+              <motion.h1
+                className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight leading-[1.02]"
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.9, delay: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <span className="text-[#FF6A00]">180</span>
+              </motion.h1>
+            </div>
+
+            {/* Subtitle + CTAs in a row */}
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 1 }}
+                className="max-w-lg"
+              >
+                <p className="text-lg md:text-xl text-gray-300 leading-relaxed mb-8">
+                  Advanced flood monitoring and rapid emergency response system protecting the residents of Barangay 180.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link
+                    to="/training"
+                    className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-[#FF6A00] text-white rounded-xl font-medium hover:bg-[#E55F00] transition-all shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 hover:scale-[1.02]"
+                  >
+                    <BookOpen size={18} />
+                    Emergency Training
+                    <ChevronRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                  <Link
+                    to="/contact"
+                    className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white/[0.08] border border-white/15 text-white rounded-xl font-medium hover:bg-white/[0.14] transition-all backdrop-blur-sm"
+                  >
+                    <Phone size={18} />
+                    Emergency Hotlines
+                  </Link>
+                </div>
+              </motion.div>
+
+              {/* Floating live stats on the right */}
+              <motion.div
+                className="flex flex-wrap lg:flex-nowrap gap-4"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 1.3 }}
+              >
+                {[
+                  { label: 'Water Level', value: `${latestReading?.waterLevel ?? '--'} cm`, icon: Droplets },
+                  { label: 'Alert', value: currentAlert?.name ?? 'Safe', icon: Bell },
+                  { label: 'Weather', value: weather ? `${Math.round(weather.temperature)}°C` : '--', icon: CurrentWeatherIcon },
+                ].map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 px-4 py-3 bg-white/[0.07] backdrop-blur-md border border-white/10 rounded-xl min-w-[140px]"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+                      <item.icon size={16} className="text-[#FF6A00]" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider">{item.label}</p>
+                      <p className="text-sm text-white font-medium">{item.value}</p>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ─── LIVE STATUS BOARD ─── */}
+      <Section className="relative z-20 px-4 sm:px-6 lg:px-8 py-16">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-60px' }}
+          className="max-w-7xl mx-auto"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+            {/* Alert Status Card */}
+            <motion.div
+              variants={itemVariants}
+              className="bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-md transition-shadow p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Bell size={14} />
+                  <span>Alert Status</span>
+                </div>
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                  style={{ color: getAlertColor(currentAlert?.level ?? 1), backgroundColor: `${getAlertColor(currentAlert?.level ?? 1)}15` }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getAlertColor(currentAlert?.level ?? 1) }} />
+                  Level {currentAlert?.level ?? 1}
+                </span>
+              </div>
+              <h3 className="text-2xl font-bold text-[#1F2937] mb-1">{currentAlert?.name ?? 'Loading...'}</h3>
+              <p className="text-sm text-gray-500 mb-4">{currentAlert?.action ?? ''}</p>
+              <div className="flex items-center gap-3">
+                {alertLevels.map((al) => (
+                  <div key={al.level} className="flex-1">
+                    <div
+                      className="h-1.5 rounded-full transition-all"
+                      style={{
+                        backgroundColor: al.level <= (currentAlert?.level ?? 1) ? getAlertColor(al.level) : '#e5e7eb',
+                      }}
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1 text-center">Lvl {al.level}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Water Level Card */}
+            <motion.div
+              variants={itemVariants}
+              className="bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-md transition-shadow p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Droplets size={14} />
+                  <span>Water Level</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-gray-400">
+                  <Clock size={12} />
+                  {latestReading ? format(new Date(latestReading.timestamp), 'HH:mm') : '--:--'}
+                </div>
+              </div>
+              <div className="flex items-end gap-2 mb-3">
+                <span className="text-4xl font-bold text-[#1F2937]">{latestReading?.waterLevel ?? '--'}</span>
+                <span className="text-lg text-gray-400 pb-1">cm</span>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">Rainfall: {latestReading?.rainfallIndicator ?? 'N/A'}</p>
+              <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden">
+                <motion.div
+                  className="absolute inset-y-0 left-0 rounded-full"
+                  style={{ backgroundColor: getAlertColor(currentAlert?.level ?? 1) }}
+                  initial={{ width: '0%' }}
+                  whileInView={{ width: `${Math.min((latestReading?.waterLevel ?? 0), 100)}%` }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 1.5, ease: 'easeOut', delay: 0.3 }}
+                />
+              </div>
+              <div className="flex justify-between mt-1.5 text-[10px] text-gray-400">
+                <span>0 cm</span>
+                <span>100 cm</span>
+              </div>
+            </motion.div>
+
+            {/* Weather Forecast Card (Open-Meteo) */}
+            <motion.div
+              variants={itemVariants}
+              className="bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-md transition-shadow p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <CloudRain size={14} />
+                  <span>Weather Forecast</span>
+                </div>
+                <span className="text-[10px] text-gray-400 uppercase tracking-wider">Caloocan City</span>
+              </div>
+
+              {weatherLoading ? (
+                <div className="flex items-center justify-center h-36">
+                  <div className="w-6 h-6 border-2 border-gray-200 border-t-[#FF6A00] rounded-full animate-spin" />
+                </div>
+              ) : weather ? (
+                <>
+                  {/* Current conditions */}
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                      <CurrentWeatherIcon size={28} style={{ color: currentWeather?.color }} />
+                    </div>
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-bold text-[#1F2937]">{Math.round(weather.temperature)}</span>
+                        <span className="text-lg text-gray-400">°C</span>
+                      </div>
+                      <p className="text-sm text-gray-500">{currentWeather?.label}</p>
+                    </div>
+                  </div>
+
+                  {/* Current details */}
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    {[
+                      { icon: Thermometer, label: 'Feels', value: `${Math.round(weather.apparentTemp)}°` },
+                      { icon: Droplets, label: 'Humidity', value: `${weather.humidity}%` },
+                      { icon: Wind, label: 'Wind', value: `${Math.round(weather.windSpeed)} km/h` },
+                    ].map((d) => (
+                      <div key={d.label} className="bg-gray-50 rounded-lg px-2 py-2 text-center">
+                        <d.icon size={12} className="text-gray-400 mx-auto mb-0.5" />
+                        <p className="text-xs text-gray-500">{d.label}</p>
+                        <p className="text-sm font-semibold text-[#1F2937]">{d.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 5-day mini forecast */}
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="flex justify-between">
+                      {weather.daily.slice(0, 5).map((day, i) => {
+                        const dayInfo = getWeatherInfo(day.weatherCode);
+                        const DayIcon = dayInfo.icon;
+                        const dayLabel = i === 0 ? 'Today' : format(new Date(day.date), 'EEE');
+                        return (
+                          <div key={day.date} className="flex flex-col items-center gap-1 flex-1">
+                            <span className="text-[10px] text-gray-400">{dayLabel}</span>
+                            <DayIcon size={14} style={{ color: dayInfo.color }} />
+                            <span className="text-[11px] font-medium text-[#1F2937]">{Math.round(day.tempMax)}°</span>
+                            <span className="text-[10px] text-gray-400">{Math.round(day.tempMin)}°</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-36 text-gray-400">
+                  <Cloud size={24} className="mb-2" />
+                  <p className="text-sm">Unable to load weather</p>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        </motion.div>
+      </Section>
+
+      {/* ─── COMMUNITY STATS ─── */}
+      <Section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-14"
+          >
+            <p className="text-sm tracking-widest text-[#FF6A00] font-medium uppercase mb-3">Our Community</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-[#1F2937] mb-4">About Barangay 180</h2>
+            <p className="text-gray-500 max-w-xl mx-auto">
+              A resilient community working together. Our system ensures the safety of every resident through technology and preparedness.
+            </p>
+          </motion.div>
+
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-60px' }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
+          >
+            {[
+              { icon: Users, label: 'Residents Protected', value: 18802, suffix: '', color: '#3B82F6', bg: 'bg-blue-50' },
+              { icon: Droplets, label: 'Monitoring Stations', value: 3, suffix: ' Active', color: '#FF6A00', bg: 'bg-orange-50' },
+              { icon: Zap, label: 'Response Time', value: 0, suffix: '', color: '#8B5CF6', bg: 'bg-violet-50', textOverride: 'Real-time' },
+              { icon: Shield, label: 'Safety Protocols', value: 4, suffix: ' Levels', color: '#22C55E', bg: 'bg-green-50' },
+            ].map((stat, idx) => (
+              <motion.div
+                key={idx}
+                variants={itemVariants}
+                className="group bg-gray-50 hover:bg-white rounded-2xl p-6 border border-transparent hover:border-gray-200 hover:shadow-md transition-all cursor-default"
+              >
+                <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
+                  <stat.icon size={22} style={{ color: stat.color }} />
+                </div>
+                <h3 className="text-3xl font-bold text-[#1F2937] mb-1">
+                  {stat.textOverride ? stat.textOverride : <AnimatedStat end={stat.value} suffix={stat.suffix} />}
+                </h3>
+                <p className="text-sm text-gray-500">{stat.label}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </Section>
+
+      {/* ─── FEATURES ─── */}
+      <Section className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50 overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.7 }}
+              viewport={{ once: true }}
+            >
+              <p className="text-sm tracking-widest text-[#FF6A00] font-medium uppercase mb-3">How It Works</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-[#1F2937] mb-5">Comprehensive Protection</h2>
+              <p className="text-gray-500 mb-10 leading-relaxed max-w-md">
+                Hydro Guard 180 integrates IoT technology with community protocols to ensure rapid response during heavy rainfall and flooding events.
+              </p>
+
+              <div className="space-y-5">
+                {[
+                  { title: 'IoT Water Sensors', desc: 'Real-time water level data collection.', icon: Waves, color: '#3B82F6', bg: 'bg-blue-50' },
+                  { title: 'Smart Alert System', desc: 'Automated 4-level warnings based on water thresholds.', icon: Bell, color: '#FF6A00', bg: 'bg-orange-50' },
+                  { title: 'Resident Directory', desc: 'Quick access to emergency contacts for all households.', icon: Users, color: '#8B5CF6', bg: 'bg-violet-50' },
+                ].map((feature, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.15 }}
+                    viewport={{ once: true }}
+                    className="flex gap-4 p-4 rounded-xl hover:bg-white transition-colors group"
+                  >
+                    <div className={`flex-shrink-0 w-11 h-11 ${feature.bg} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                      <feature.icon size={20} style={{ color: feature.color }} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-[#1F2937] mb-0.5">{feature.title}</h4>
+                      <p className="text-sm text-gray-500">{feature.desc}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Right: Photo with overlay */}
+            <motion.div
+              initial={{ opacity: 0, x: 40 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              viewport={{ once: true }}
+              className="relative"
+            >
+              <div className="absolute -inset-6 bg-gradient-to-tr from-[#FF6A00]/10 to-blue-500/10 rounded-[40px] blur-[50px]" />
+              <div className="relative rounded-2xl overflow-hidden shadow-xl">
+                <img
+                  src={cityHallImage}
+                  alt="Lungsod ng Caloocan City Hall"
+                  className="w-full h-80 lg:h-96 object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#26343A]/80 via-transparent to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-5">
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Sensors', value: 'Online', dot: 'bg-green-500' },
+                      { label: 'Water', value: `${latestReading?.waterLevel ?? '--'} cm`, dot: 'bg-blue-500' },
+                      { label: 'Alerts', value: 'Active', dot: 'bg-[#FF6A00]' },
+                    ].map((m) => (
+                      <div key={m.label} className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-3 text-center">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${m.dot}`} />
+                          <span className="text-[10px] text-gray-300 uppercase">{m.label}</span>
+                        </div>
+                        <p className="text-sm font-semibold text-white">{m.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {alertLevels.map((al) => (
+                  <div key={al.level} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-sm text-gray-600">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: al.color }} />
+                    <span>Lvl {al.level}: {al.minWaterLevel}–{al.maxWaterLevel === 999 ? '∞' : al.maxWaterLevel} cm</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ─── CTA ─── */}
+      <Section className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-5xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="relative bg-[#26343A] rounded-3xl p-10 md:p-16 text-center overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-72 h-72 bg-[#FF6A00] rounded-full blur-[120px] opacity-15" />
+            <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-500 rounded-full blur-[120px] opacity-10" />
+
+            <div className="relative z-10">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.2 }}
+              >
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 border border-white/15 rounded-full mb-8">
+                  <MapPin size={14} className="text-[#FF6A00]" />
+                  <span className="text-sm text-gray-300">Barangay 180, Caloocan City</span>
+                </div>
+              </motion.div>
+
+              <h2 className="text-3xl md:text-5xl font-bold text-white mb-5">Ready to get involved?</h2>
+              <p className="text-lg text-gray-400 mb-10 max-w-2xl mx-auto">
+                Join our community preparedness program and help keep Barangay 180 safe during the rainy season.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link
+                  to="/training"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-[#FF6A00] text-white rounded-xl font-medium hover:bg-[#E55F00] transition-all shadow-lg shadow-orange-500/25"
+                >
+                  Start Training
+                  <ChevronRight size={16} />
+                </Link>
+                <Link
+                  to="/faq"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-white text-[#26343A] rounded-xl font-medium hover:bg-gray-100 transition-colors"
+                >
+                  Read FAQ
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </Section>
+    </div>
+  );
+}
