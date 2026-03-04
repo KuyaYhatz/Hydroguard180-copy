@@ -91,7 +91,7 @@ exports.getLatestWaterMonitoring = async (req, res) => {
   }
 };
 
-// Create water monitoring record
+// Create water monitoring record (authenticated)
 exports.createWaterMonitoring = async (req, res) => {
   try {
     const { waterLevel, waterLevelUnit, rainfallIndicator, deviceStatus, notes } = req.body;
@@ -119,6 +119,47 @@ exports.createWaterMonitoring = async (req, res) => {
     res.status(201).json(record);
   } catch (error) {
     console.error('Create water monitoring error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Create water monitoring record from ESP32 device (unauthenticated)
+exports.createFromDevice = async (req, res) => {
+  try {
+    const { deviceId, waterLevel, waterLevelUnit, rainfallIndicator } = req.body;
+
+    // Verify device ID
+    if (deviceId !== 'hydro-001') {
+      return res.status(401).json({ error: 'Invalid device ID' });
+    }
+
+    if (!waterLevel) {
+      return res.status(400).json({ error: 'Water level is required' });
+    }
+
+    const waterLevelValue = parseFloat(waterLevel);
+    
+    // Automatically calculate alert level based on water level
+    const alertLevel = await calculateAlertLevel(waterLevelValue);
+
+    const record = await prisma.waterMonitoring.create({
+      data: {
+        waterLevel: waterLevelValue,
+        waterLevelUnit: waterLevelUnit || 'cm',
+        alertLevel: alertLevel,
+        rainfallIndicator: rainfallIndicator || 'None',
+        deviceStatus: 'Online',
+        notes: 'Auto-created from ESP32 device'
+      }
+    });
+
+    res.status(201).json({ 
+      success: true,
+      message: 'Water level recorded successfully',
+      data: record 
+    });
+  } catch (error) {
+    console.error('Device water monitoring error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

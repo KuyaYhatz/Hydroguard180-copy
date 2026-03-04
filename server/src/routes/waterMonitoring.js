@@ -7,6 +7,9 @@ const { authenticate, optionalAuth } = require('../middleware/auth');
 router.get('/latest', optionalAuth, waterMonitoringController.getLatestWaterMonitoring);
 router.get('/stats', optionalAuth, waterMonitoringController.getWaterMonitoringStats);
 
+// ESP32 Device endpoint (unauthenticated)
+router.post('/device', waterMonitoringController.createFromDevice);
+
 // Protected routes
 router.get('/', authenticate, waterMonitoringController.getAllWaterMonitoring);
 router.get('/:id', authenticate, waterMonitoringController.getWaterMonitoringById);
