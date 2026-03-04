@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { waterMonitoringAPI, alertLevelsAPI } from '../../utils/api';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { BarChart3, TrendingUp, Droplets, AlertTriangle, Info, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+import { useWaterMonitoringSSE } from '../../hooks/useWaterMonitoringSSE';
 
 export function Analytics() {
   const [readings, setReadings] = useState<any[]>([]);
@@ -28,6 +29,23 @@ export function Analytics() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Real-time SSE updates
+  const handleWaterMonitoringUpdate = useCallback((newRecord: any) => {
+    console.log('🌊 Analytics real-time update:', newRecord);
+    
+    setAllReadings(prev => {
+      const updated = [newRecord, ...prev];
+      // If no date filter is applied, update readings too
+      if (!dateRange.start && !dateRange.end) {
+        setReadings(updated);
+        calculateStats(updated);
+      }
+      return updated;
+    });
+  }, [dateRange]);
+
+  const { isConnected } = useWaterMonitoringSSE(handleWaterMonitoringUpdate);
 
   const loadData = async () => {
     try {

@@ -7,9 +7,10 @@ import {
   CloudSnow, CloudLightning, CloudDrizzle, Wind, Thermometer
 } from 'lucide-react';
 import { waterMonitoringAPI, alertLevelsAPI } from '../utils/api';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { format } from 'date-fns';
 import CountUp from 'react-countup';
+import { useWaterMonitoringSSE } from '../hooks/useWaterMonitoringSSE';
 
 // Hero image from assets
 import heroImage from "../../assets/hero-image.png";
@@ -100,6 +101,23 @@ export function Home() {
     loadData();
     loadWeather();
   }, []);
+
+  // Real-time SSE updates
+  const handleWaterMonitoringUpdate = useCallback((newRecord: any) => {
+    console.log('🌊 Real-time update received:', newRecord);
+    setLatestReading(newRecord);
+    
+    // Update current alert based on new reading
+    const alert = alertLevels.find(
+      (a: any) => newRecord.waterLevel >= a.minWaterLevel && newRecord.waterLevel <= a.maxWaterLevel
+    ) || alertLevels.find((a: any) => a.level === 4);
+    
+    if (alert) {
+      setCurrentAlert(alert);
+    }
+  }, [alertLevels]);
+
+  const { isConnected } = useWaterMonitoringSSE(handleWaterMonitoringUpdate);
 
   const loadData = async () => {
     try {

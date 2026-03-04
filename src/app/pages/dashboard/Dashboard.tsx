@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { Users, BookUser, Droplets, AlertTriangle, TrendingUp, Activity, Clock } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { usersAPI, residentsAPI, waterMonitoringAPI, auditLogsAPI } from '../../utils/api';
 import { format } from 'date-fns';
+import { useWaterMonitoringSSE } from '../../hooks/useWaterMonitoringSSE';
 
 export function Dashboard() {
   const [stats, setStats] = useState({
@@ -19,6 +20,33 @@ export function Dashboard() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Real-time SSE updates
+  const handleWaterMonitoringUpdate = useCallback((newRecord: any) => {
+    console.log('🌊 Dashboard real-time update:', newRecord);
+    
+    setStats(prev => {
+      // Update chart data with new record
+      const newChartData = [
+        ...prev.chartData,
+        {
+          time: format(new Date(newRecord.timestamp), 'HH:mm'),
+          level: newRecord.waterLevel,
+          alert: newRecord.alertLevel
+        }
+      ].slice(-10); // Keep last 10 readings
+
+      return {
+        ...prev,
+        totalReadings: prev.totalReadings + 1,
+        currentAlertLevel: newRecord.alertLevel,
+        latestReading: newRecord,
+        chartData: newChartData,
+      };
+    });
+  }, []);
+
+  const { isConnected } = useWaterMonitoringSSE(handleWaterMonitoringUpdate);
 
   const loadData = async () => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getAlertLevelByLevel, getAlertLevels } from '../../utils/database';
 import { waterMonitoringAPI } from '../../utils/api';
 import { Button } from '../../components/ui/button';
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from 'sonner';
 import { Droplets, Download, Filter, Plus, Printer } from 'lucide-react';
 import { format } from 'date-fns';
+import { useWaterMonitoringSSE } from '../../hooks/useWaterMonitoringSSE';
 
 export function WaterMonitoring() {
   const [readings, setReadings] = useState<any[]>([]);
@@ -26,6 +27,23 @@ export function WaterMonitoring() {
   useEffect(() => {
     loadReadings();
   }, []);
+
+  // Real-time SSE updates
+  const handleWaterMonitoringUpdate = useCallback((newRecord: any) => {
+    console.log('🌊 WaterMonitoring real-time update:', newRecord);
+    
+    setReadings(prev => {
+      // Add new record at the beginning (most recent first)
+      const updated = [newRecord, ...prev];
+      return updated;
+    });
+    
+    toast.success(`New water level reading: ${newRecord.waterLevel} cm`, {
+      description: `Alert Level ${newRecord.alertLevel} - ${format(new Date(newRecord.timestamp), 'PPp')}`,
+    });
+  }, []);
+
+  const { isConnected } = useWaterMonitoringSSE(handleWaterMonitoringUpdate);
 
   useEffect(() => {
     applyFilters();

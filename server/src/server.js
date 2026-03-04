@@ -16,6 +16,7 @@ const settingsRoutes = require('./routes/settings');
 const auditLogRoutes = require('./routes/auditLogs');
 const faqRoutes = require('./routes/faqs');
 const inquiryRoutes = require('./routes/inquiries');
+const sseRoutes = require('./routes/sse');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +45,9 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/faqs', faqRoutes);
 app.use('/api/inquiries', inquiryRoutes);
+
+// SSE routes (Server-Sent Events for real-time updates)
+app.use('/api/sse', sseRoutes);
 
 // Serve React app for all non-API routes (SPA routing)
 app.get('*', (req, res) => {

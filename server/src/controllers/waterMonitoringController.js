@@ -1,4 +1,5 @@
 const prisma = require('../db');
+const waterMonitoringEmitter = require('../utils/eventEmitter');
 
 // Helper function to determine alert level based on water level
 async function calculateAlertLevel(waterLevel) {
@@ -116,6 +117,9 @@ exports.createWaterMonitoring = async (req, res) => {
       }
     });
 
+    // Emit SSE event for real-time updates
+    waterMonitoringEmitter.emit('new-record', record);
+
     res.status(201).json(record);
   } catch (error) {
     console.error('Create water monitoring error:', error);
@@ -152,6 +156,9 @@ exports.createFromDevice = async (req, res) => {
         notes: 'Auto-created from ESP32 device'
       }
     });
+
+    // Emit SSE event for real-time updates
+    waterMonitoringEmitter.emit('new-record', record);
 
     res.status(201).json({ 
       success: true,
