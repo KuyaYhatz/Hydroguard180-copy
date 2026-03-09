@@ -13,7 +13,7 @@ router.post('/device', waterMonitoringController.createFromDevice);
 // Protected routes
 router.get('/', authenticate, waterMonitoringController.getAllWaterMonitoring);
 router.get('/:id', authenticate, waterMonitoringController.getWaterMonitoringById);
-router.post('/', authenticate, waterMonitoringController.createWaterMonitoring);
+router.post('/', waterMonitoringController.createWaterMonitoring);
 router.put('/:id', authenticate, waterMonitoringController.updateWaterMonitoring);
 router.delete('/:id', authenticate, waterMonitoringController.deleteWaterMonitoring);
 
