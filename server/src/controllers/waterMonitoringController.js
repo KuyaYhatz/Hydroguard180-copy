@@ -1,19 +1,24 @@
 const prisma = require('../db');
 const waterMonitoringEmitter = require('../utils/eventEmitter');
 
-// Helper function to determine alert level based on water level
-async function calculateAlertLevel(waterLevel) {
+// Helper function to determine alert level based on distance reading from ultrasonic sensor
+// NOTE: Ultrasonic sensor measures DISTANCE from sensor to water surface
+// - Lower distance (cm) = Water is CLOSER to sensor = HIGHER water level = MORE DANGER (Level 4: 0-40cm)
+// - Higher distance (cm) = Water is FARTHER from sensor = LOWER water level = SAFER (Level 1: 81-999cm)
+// Thresholds in database are configured for ultrasonic sensor distance readings
+async function calculateAlertLevel(distance) {
   const alertLevels = await prisma.alertLevel.findMany({
     orderBy: { level: 'asc' }
   });
 
+  // Find the matching alert level based on distance
   for (const level of alertLevels) {
-    if (waterLevel >= level.minWaterLevel && waterLevel <= level.maxWaterLevel) {
+    if (distance >= level.minWaterLevel && distance <= level.maxWaterLevel) {
       return level.level;
     }
   }
 
-  // If above all ranges, return highest level
+  // If distance is below all ranges (very close), return highest alert level (most dangerous)
   return alertLevels[alertLevels.length - 1].level;
 }
 

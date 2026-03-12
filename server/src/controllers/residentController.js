@@ -39,14 +39,31 @@ exports.createResident = async (req, res) => {
   try {
     const { residentName, address, contactNumber, emergencyContact, householdCount, notes } = req.body;
 
+    // Validate required fields
+    if (!residentName || !residentName.trim()) {
+      return res.status(400).json({ error: 'Resident name is required' });
+    }
+    if (!address || !address.trim()) {
+      return res.status(400).json({ error: 'Address is required' });
+    }
+    if (!contactNumber || !contactNumber.trim()) {
+      return res.status(400).json({ error: 'Contact number is required' });
+    }
+    if (!emergencyContact || !emergencyContact.trim()) {
+      return res.status(400).json({ error: 'Emergency contact is required' });
+    }
+    if (!householdCount || isNaN(parseInt(householdCount))) {
+      return res.status(400).json({ error: 'Valid household count is required' });
+    }
+
     const resident = await prisma.resident.create({
       data: {
-        residentName,
-        address,
-        contactNumber,
-        emergencyContact,
+        residentName: residentName.trim(),
+        address: address.trim(),
+        contactNumber: contactNumber.trim(),
+        emergencyContact: emergencyContact.trim(),
         householdCount: parseInt(householdCount),
-        notes,
+        notes: notes ? notes.trim() : '',
         status: 'active'
       }
     });

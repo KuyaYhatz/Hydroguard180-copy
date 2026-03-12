@@ -7,7 +7,6 @@ import {
   Droplets,
   AlertTriangle,
   BarChart3,
-  Settings,
   LogOut,
   HelpCircle,
   MessageSquareText,
@@ -61,7 +60,6 @@ export function DashboardLayout() {
     { path: '/dashboard/residents', label: 'Resident Directory', icon: BookUser },
     { path: '/dashboard/faq-management', label: 'FAQ Management', icon: HelpCircle },
     { path: '/dashboard/alerts', label: 'Alert Levels', icon: AlertTriangle },
-    { path: '/dashboard/settings', label: 'Admin Panel', icon: Settings, adminOnly: true },
     { path: '/dashboard/inquiries', label: 'Inquiries', icon: MessageSquareText },
   ];
 

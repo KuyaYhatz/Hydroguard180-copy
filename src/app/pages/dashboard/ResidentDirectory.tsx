@@ -5,7 +5,7 @@ import { exportToCSV } from '../../utils/database';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '../../components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner';
@@ -25,8 +25,11 @@ export function ResidentDirectory() {
     residentName: '',
     address: '',
     contactNumber: '',
+    emergencyContact: '',
+    householdCount: '',
     notes: '',
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     type: 'archive' | 'delete';
@@ -51,13 +54,38 @@ export function ResidentDirectory() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Clear previous errors
+    setFormErrors({});
+
+    // Validate form
+    const errors: Record<string, string> = {};
+    if (!formData.residentName.trim()) errors.residentName = 'Resident name is required';
+    if (!formData.address.trim()) errors.address = 'Address is required';
+    if (!formData.contactNumber.trim()) errors.contactNumber = 'Contact number is required';
+    if (!formData.emergencyContact.trim()) errors.emergencyContact = 'Emergency contact is required';
+    if (!formData.householdCount.trim()) {
+      errors.householdCount = 'Household count is required';
+    } else if (isNaN(Number(formData.householdCount)) || Number(formData.householdCount) < 1) {
+      errors.householdCount = 'Must be a valid number greater than 0';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast.error('Please fix the form errors');
+      return;
+    }
+    
     try {
       if (editingResident) {
-        await residentsAPI.update(editingResident.id, formData);
+        await residentsAPI.update(editingResident.id, {
+          ...formData,
+          householdCount: parseInt(formData.householdCount)
+        });
         toast.success('Resident updated successfully');
       } else {
         await residentsAPI.create({
           ...formData,
+          householdCount: parseInt(formData.householdCount),
           status: 'active',
         });
         toast.success('Resident added successfully');
@@ -66,9 +94,10 @@ export function ResidentDirectory() {
       await loadResidents();
       setShowDialog(false);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving resident:', error);
-      toast.error(editingResident ? 'Failed to update resident' : 'Failed to add resident');
+      const errorMessage = error.message || (editingResident ? 'Failed to update resident' : 'Failed to add resident');
+      toast.error(errorMessage);
     }
   };
 
@@ -78,8 +107,11 @@ export function ResidentDirectory() {
       residentName: resident.residentName,
       address: resident.address,
       contactNumber: resident.contactNumber,
-      notes: resident.notes,
+      emergencyContact: resident.emergencyContact,
+      householdCount: resident.householdCount.toString(),
+      notes: resident.notes || '',
     });
+    setFormErrors({});
     setShowDialog(true);
   };
 
@@ -121,8 +153,11 @@ export function ResidentDirectory() {
       residentName: '',
       address: '',
       contactNumber: '',
+      emergencyContact: '',
+      householdCount: '',
       notes: '',
     });
+    setFormErrors({});
   };
 
   const filteredResidents = residents.filter((r) => {
@@ -172,32 +207,60 @@ export function ResidentDirectory() {
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>{editingResident ? 'Edit Resident' : 'Add New Resident'}</DialogTitle>
+                <DialogDescription>
+                  {editingResident ? 'Update resident information' : 'Fill in the details to add a new resident to the directory'}
+                </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Resident Name *</label>
                   <Input
-                    required
                     value={formData.residentName}
                     onChange={(e) => setFormData({ ...formData, residentName: e.target.value })}
+                    className={formErrors.residentName ? 'border-red-500' : ''}
                   />
+                  {formErrors.residentName && <p className="text-xs text-red-500 mt-1">{formErrors.residentName}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
                   <Input
-                    required
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className={formErrors.address ? 'border-red-500' : ''}
                   />
+                  {formErrors.address && <p className="text-xs text-red-500 mt-1">{formErrors.address}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number *</label>
                   <Input
-                    required
                     value={formData.contactNumber}
                     onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
                     placeholder="09XX XXX XXXX"
+                    className={formErrors.contactNumber ? 'border-red-500' : ''}
                   />
+                  {formErrors.contactNumber && <p className="text-xs text-red-500 mt-1">{formErrors.contactNumber}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact *</label>
+                  <Input
+                    value={formData.emergencyContact}
+                    onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
+                    placeholder="09XX XXX XXXX"
+                    className={formErrors.emergencyContact ? 'border-red-500' : ''}
+                  />
+                  {formErrors.emergencyContact && <p className="text-xs text-red-500 mt-1">{formErrors.emergencyContact}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Household Count *</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={formData.householdCount}
+                    onChange={(e) => setFormData({ ...formData, householdCount: e.target.value })}
+                    placeholder="Number of people in household"
+                    className={formErrors.householdCount ? 'border-red-500' : ''}
+                  />
+                  {formErrors.householdCount && <p className="text-xs text-red-500 mt-1">{formErrors.householdCount}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
@@ -289,19 +352,21 @@ export function ResidentDirectory() {
       {/* Residents Table — desktop only */}
       <div className="hidden lg:flex flex-1 min-h-0 bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden flex-col">
         <div className="overflow-auto flex-1 min-h-0 custom-scrollbar">
-          <Table className="min-w-[500px]">
+          <Table className="min-w-[700px]">
             <TableHeader className="sticky top-0 bg-white z-10">
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Address</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead>Emergency Contact</TableHead>
+                <TableHead>Household</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredResidents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-gray-500">
+                  <TableCell colSpan={6} className="text-center text-gray-500">
                     No residents found
                   </TableCell>
                 </TableRow>
@@ -311,6 +376,8 @@ export function ResidentDirectory() {
                     <TableCell className="font-medium">{resident.residentName}</TableCell>
                     <TableCell>{resident.address}</TableCell>
                     <TableCell>{resident.contactNumber}</TableCell>
+                    <TableCell>{resident.emergencyContact}</TableCell>
+                    <TableCell>{resident.householdCount}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
@@ -370,7 +437,11 @@ export function ResidentDirectory() {
                   <Badge variant="outline" className="text-[10px] shrink-0">Archived</Badge>
                 )}
               </div>
-              <p className="text-xs text-gray-600 mb-3">{resident.contactNumber}</p>
+              <div className="space-y-1 mb-3">
+                <p className="text-xs text-gray-600">📱 {resident.contactNumber}</p>
+                <p className="text-xs text-gray-600">🆘 {resident.emergencyContact}</p>
+                <p className="text-xs text-gray-600">👥 {resident.householdCount} {resident.householdCount === 1 ? 'person' : 'people'}</p>
+              </div>
               {resident.notes && (
                 <p className="text-[11px] text-gray-400 mb-3 line-clamp-2">{resident.notes}</p>
               )}

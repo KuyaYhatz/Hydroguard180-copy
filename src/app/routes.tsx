@@ -12,7 +12,6 @@ import { ResidentDirectory } from './pages/dashboard/ResidentDirectory';
 import { WaterMonitoring } from './pages/dashboard/WaterMonitoring';
 import { AlertLevels } from './pages/dashboard/AlertLevels';
 import { Analytics } from './pages/dashboard/Analytics';
-import { Settings } from './pages/dashboard/Settings';
 import { FAQManagement } from './pages/dashboard/FAQManagement';
 import { Inquiries } from './pages/dashboard/Inquiries';
 import { useAuth, type UserRole } from './context/AuthContext';
@@ -87,14 +86,6 @@ export const router = createBrowserRouter([
           { path: 'residents', Component: ResidentDirectory },
           { path: 'faq-management', Component: FAQManagement },
           { path: 'alerts', Component: AlertLevels },
-          {
-            path: 'settings',
-            element: (
-              <ProtectedRoute allowedRoles={['Super Admin', 'Admin']}>
-                <Settings />
-              </ProtectedRoute>
-            ),
-          },
           { path: 'inquiries', Component: Inquiries },
           {
             path: 'users',

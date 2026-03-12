@@ -75,14 +75,14 @@ export function AlertLevels() {
       return { valid: false, message: 'Min level must be less than max level' };
     }
 
-    // Level 1 min must always be 0
-    if (level === 1 && t.min !== 0) {
-      return { valid: false, message: 'Level 1 must start at 0' };
+    // Level 1 (Safe - farthest distance) max must always be 999 (infinity)
+    if (level === 1 && t.max !== 999) {
+      return { valid: false, message: 'Level 1 (Safe) must extend to infinity (999)' };
     }
 
-    // Level 4 max must always be 999 (infinity)
-    if (level === 4 && t.max !== 999) {
-      return { valid: false, message: 'Level 4 must extend to infinity' };
+    // Level 4 (Danger - closest distance) min must always be 0
+    if (level === 4 && t.min !== 0) {
+      return { valid: false, message: 'Level 4 (Danger) must start at 0' };
     }
 
     return { valid: true };
@@ -354,11 +354,16 @@ export function AlertLevels() {
 
         {/* Threshold Configuration - right side */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-0">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
-            <div className="w-7 h-7 bg-orange-50 rounded-lg flex items-center justify-center">
-              <AlertTriangle className="text-[#FF6A00]" size={14} />
+          <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-7 h-7 bg-orange-50 rounded-lg flex items-center justify-center">
+                <AlertTriangle className="text-[#FF6A00]" size={14} />
+              </div>
+              <h2 className="font-bold text-[#1F2937] text-sm">Threshold Config</h2>
             </div>
-            <h2 className="font-bold text-[#1F2937] text-sm">Threshold Config</h2>
+            <p className="text-[10px] text-gray-500 ml-9">
+              ⚡ Ultrasonic sensor: Lower distance = water closer (danger), Higher distance = water farther (safe)
+            </p>
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100 custom-scrollbar">
@@ -446,8 +451,8 @@ export function AlertLevels() {
                             const newMin = parseInt(e.target.value) || 0;
                             handleThresholdChange(level.level, 'min', newMin);
                           }}
-                          disabled={level.level === 1}
-                          placeholder={level.level === 1 ? '0 (fixed)' : ''}
+                          disabled={level.level === 4}
+                          placeholder={level.level === 4 ? '0 (fixed)' : ''}
                         />
                       ) : (
                         <span className="h-7 flex items-center text-xs text-[#1F2937] px-2 bg-gray-50 rounded border border-gray-100 flex-1">
@@ -462,7 +467,7 @@ export function AlertLevels() {
                     <div className="flex items-center gap-1.5 flex-1">
                       <label className="text-[10px] text-gray-400">Max</label>
                       {isEditing ? (
-                        level.level === 4 ? (
+                        level.level === 1 ? (
                           <span className="h-7 flex items-center text-xs text-[#1F2937] px-2 bg-gray-50 rounded border border-gray-100 flex-1">
                             ∞
                           </span>
@@ -504,8 +509,8 @@ export function AlertLevels() {
                       ) : (
                         <div className="bg-blue-50 border border-blue-100 rounded-md px-2 py-1.5 mt-1">
                           <p className="text-[10px] text-blue-700">
-                            {level.level === 1 && "Level 1 always starts at 0. Changing max will auto-adjust Level 2 min."}
-                            {level.level === 4 && "Level 4 always extends to infinity. Changing min will auto-adjust Level 3 max."}
+                            {level.level === 1 && "Level 1 (Safe) always extends to infinity (far distance). Changing min will auto-adjust Level 2 max."}
+                            {level.level === 4 && "Level 4 (Danger) always starts at 0 (close distance). Changing max will auto-adjust Level 3 min."}
                             {level.level > 1 && level.level < 4 && (
                               "Changes will auto-adjust adjacent levels to maintain continuity (no gaps/overlaps)."
                             )}
