@@ -102,7 +102,7 @@ export function WaterMonitoring() {
       }
 
       setShowAddDialog(false);
-      setNewReading({ waterLevel: '', rainfallIndicator: 'None' });
+      setNewReading({ waterLevel: '' });
       toast.success('Reading added successfully');
     } catch (error: any) {
       console.error('Failed to add reading:', error);
@@ -332,15 +332,6 @@ export function WaterMonitoring() {
                   />
                   <p className="text-xs text-gray-500 mt-1">Alert level will be calculated automatically</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rainfall Indicator</label>
-                  <Select 
-                    value={newReading.rainfallIndicator} 
-                    onValueChange={(value) => setNewReading({ ...newReading, rainfallIndicator: value })}
-                    disabled={loading}
-                  >
-                  </Select>
-                </div>
                 <div className="flex gap-2">
                   <Button type="submit" className="flex-1 bg-[#FF6A00] hover:bg-[#E55F00]" disabled={loading}>
                     {loading ? 'Adding...' : 'Add Reading'}
@@ -458,10 +449,6 @@ export function WaterMonitoring() {
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide">Water Level</p>
                     <p className="text-lg font-bold text-[#1F2937]">{reading.waterLevel} <span className="text-xs font-normal text-gray-500">{reading.waterLevelUnit}</span></p>
-                  </div>
-                  <div className="ml-auto text-right">
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide">Rainfall</p>
-                    <p className="text-sm font-medium text-[#1F2937]">{reading.rainfallIndicator}</p>
                   </div>
                 </div>
               </div>
