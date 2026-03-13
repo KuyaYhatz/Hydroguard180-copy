@@ -418,13 +418,12 @@ export function WaterMonitoring() {
                 <TableHead>Time</TableHead>
                 <TableHead>Water Level</TableHead>
                 <TableHead>Alert Level</TableHead>
-                <TableHead>Rainfall</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredReadings.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-gray-500">
+                  <TableCell colSpan={4} className="text-center text-gray-500">
                     No readings found
                   </TableCell>
                 </TableRow>
@@ -437,7 +436,6 @@ export function WaterMonitoring() {
                       {reading.waterLevel} {reading.waterLevelUnit}
                     </TableCell>
                     <TableCell>{getAlertBadge(reading.alertLevel)}</TableCell>
-                    <TableCell>{reading.rainfallIndicator}</TableCell>
                   </TableRow>
                 ))
               )}
