@@ -5,7 +5,7 @@
     "waterLevel": 45,
     "waterLevelUnit": "cm",
     "alertLevel": 3,
-    "rainfallIndicator": "None",
+    "": "None",
     "deviceStatus": "Online",
     "notes": ""
   },
@@ -15,7 +15,7 @@
     "waterLevel": 46,
     "waterLevelUnit": "cm",
     "alertLevel": 3,
-    "rainfallIndicator": "None",
+    "": "None",
     "deviceStatus": "Online",
     "notes": ""
   },
@@ -25,7 +25,7 @@
     "waterLevel": 52,
     "waterLevelUnit": "cm",
     "alertLevel": 3,
-    "rainfallIndicator": "Light",
+    "": "Light",
     "deviceStatus": "Online",
     "notes": ""
   },
@@ -35,7 +35,7 @@
     "waterLevel": 68,
     "waterLevelUnit": "cm",
     "alertLevel": 2,
-    "rainfallIndicator": "Moderate",
+    "": "Moderate",
     "deviceStatus": "Online",
     "notes": "Water level rising"
   },
@@ -45,7 +45,7 @@
     "waterLevel": 85,
     "waterLevelUnit": "cm",
     "alertLevel": 1,
-    "rainfallIndicator": "Heavy",
+    "": "Heavy",
     "deviceStatus": "Online",
     "notes": "Water receding to safe levels"
   },
@@ -55,7 +55,7 @@
     "waterLevel": 72,
     "waterLevelUnit": "cm",
     "alertLevel": 2,
-    "rainfallIndicator": "Moderate",
+    "": "Moderate",
     "deviceStatus": "Online",
     "notes": "Water level decreasing"
   },
@@ -65,7 +65,7 @@
     "waterLevel": 65,
     "waterLevelUnit": "cm",
     "alertLevel": 2,
-    "rainfallIndicator": "Light",
+    "": "Light",
     "deviceStatus": "Online",
     "notes": ""
   },
@@ -75,7 +75,7 @@
     "waterLevel": 95,
     "waterLevelUnit": "cm",
     "alertLevel": 1,
-    "rainfallIndicator": "None",
+    "": "None",
     "deviceStatus": "Online",
     "notes": "Water level safe - sensor far from water surface"
   }

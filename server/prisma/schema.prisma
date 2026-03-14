@@ -60,7 +60,7 @@ model WaterMonitoring {
   waterLevel         Float
   waterLevelUnit     String   @default("cm")
   alertLevel         Int
-  rainfallIndicator  String
+    String
   deviceStatus       String
   notes              String?  @db.Text
 

@@ -92,7 +92,7 @@ async function main() {
           waterLevel: reading.waterLevel,
           waterLevelUnit: reading.waterLevelUnit,
           alertLevel: reading.alertLevel,
-          rainfallIndicator: reading.rainfallIndicator,
+          : reading.,
           deviceStatus: reading.deviceStatus,
           notes: reading.notes || ''
         }

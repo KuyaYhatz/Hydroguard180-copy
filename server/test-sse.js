@@ -3,17 +3,17 @@ const fetch = require('node-fetch');
 // Test the ESP32 device endpoint to simulate real-time updates
 async function sendWaterLevelReading() {
   const readings = [
-    { waterLevel: 25, rainfallIndicator: 'None' },
-    { waterLevel: 42, rainfallIndicator: 'Light' },
-    { waterLevel: 58, rainfallIndicator: 'Moderate' },
-    { waterLevel: 75, rainfallIndicator: 'Heavy' },
-    { waterLevel: 95, rainfallIndicator: 'Heavy' },
+    { waterLevel: 25, : 'None' },
+    { waterLevel: 42, : 'Light' },
+    { waterLevel: 58, : 'Moderate' },
+    { waterLevel: 75, : 'Heavy' },
+    { waterLevel: 95, : 'Heavy' },
   ];
 
   const randomReading = readings[Math.floor(Math.random() * readings.length)];
   
   console.log(`\n📡 Sending water level reading: ${randomReading.waterLevel} cm`);
-  console.log(`🌧️  Rainfall: ${randomReading.rainfallIndicator}`);
+  console.log(`🌧️  Rainfall: ${randomReading.}`);
 
   try {
     const response = await fetch('http://localhost:3000/api/water-monitoring/device', {

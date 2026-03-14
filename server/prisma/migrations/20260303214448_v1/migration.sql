@@ -53,7 +53,7 @@ CREATE TABLE `water_monitoring` (
     `waterLevel` DOUBLE NOT NULL,
     `waterLevelUnit` VARCHAR(191) NOT NULL DEFAULT 'cm',
     `alertLevel` INTEGER NOT NULL,
-    `rainfallIndicator` VARCHAR(191) NOT NULL,
+    `` VARCHAR(191) NOT NULL,
     `deviceStatus` VARCHAR(191) NOT NULL,
     `notes` TEXT NULL,
 
