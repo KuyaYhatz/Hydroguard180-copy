@@ -116,7 +116,6 @@ exports.createWaterMonitoring = async (req, res) => {
         waterLevel: waterLevelValue,
         waterLevelUnit: waterLevelUnit || 'cm',
         alertLevel: alertLevel,
-        rainfallIndicator: rainfallIndicator || 'None',
         deviceStatus: deviceStatus || 'Online',
         notes: notes || ''
       }
@@ -135,7 +134,7 @@ exports.createWaterMonitoring = async (req, res) => {
 // Create water monitoring record from ESP32 device (unauthenticated)
 exports.createFromDevice = async (req, res) => {
   try {
-    const { deviceId, waterLevel, waterLevelUnit, rainfallIndicator } = req.body;
+    const { deviceId, waterLevel, waterLevelUnit } = req.body;
 
     // Verify device ID
     if (deviceId !== 'hydro-001') {
@@ -156,7 +155,6 @@ exports.createFromDevice = async (req, res) => {
         waterLevel: waterLevelValue,
         waterLevelUnit: waterLevelUnit || 'cm',
         alertLevel: alertLevel,
-        rainfallIndicator: rainfallIndicator || 'None',
         deviceStatus: 'Online',
         notes: 'Auto-created from ESP32 device'
       }
@@ -180,7 +178,7 @@ exports.createFromDevice = async (req, res) => {
 exports.updateWaterMonitoring = async (req, res) => {
   try {
     const { id } = req.params;
-    const { waterLevel, waterLevelUnit, rainfallIndicator, deviceStatus, notes } = req.body;
+    const { waterLevel, waterLevelUnit, deviceStatus, notes } = req.body;
 
     const updateData = {};
 
@@ -192,7 +190,6 @@ exports.updateWaterMonitoring = async (req, res) => {
     }
 
     if (waterLevelUnit !== undefined) updateData.waterLevelUnit = waterLevelUnit;
-    if (rainfallIndicator !== undefined) updateData.rainfallIndicator = rainfallIndicator;
     if (deviceStatus !== undefined) updateData.deviceStatus = deviceStatus;
     if (notes !== undefined) updateData.notes = notes;
 
