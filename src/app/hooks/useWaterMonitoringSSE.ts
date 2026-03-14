@@ -7,7 +7,6 @@ export interface WaterMonitoringRecord {
   waterLevel: number;
   waterLevelUnit: string;
   alertLevel: number;
-  : string;
   deviceStatus: string;
   notes: string;
   timestamp: string;
