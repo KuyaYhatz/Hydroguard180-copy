@@ -106,14 +106,16 @@ exports.createWaterMonitoring = async (req, res) => {
       return res.status(400).json({ error: 'Water level is required' });
     }
 
-    const waterLevelValue = parseFloat(waterLevel);
+    const TANK_HEIGHT = 100;
+    const distance = parseFloat(waterLevel);
+    const waterDepth = TANK_HEIGHT - distance;
     
     // Automatically calculate alert level based on water level
-    const alertLevel = await calculateAlertLevel(waterLevelValue);
+    const alertLevel = await calculateAlertLevel(waterDepth);
 
     const record = await prisma.waterMonitoring.create({
       data: {
-        waterLevel: waterLevelValue,
+        waterLevel: waterDepth,
         waterLevelUnit: waterLevelUnit || 'cm',
         alertLevel: alertLevel,
         :  || 'None',
@@ -146,14 +148,16 @@ exports.createFromDevice = async (req, res) => {
       return res.status(400).json({ error: 'Water level is required' });
     }
 
-    const waterLevelValue = parseFloat(waterLevel);
+    const TANK_HEIGHT = 100; // adjust mo
+    const distance = parseFloat(waterLevel);
+    const waterDepth = TANK_HEIGHT - distance;
     
     // Automatically calculate alert level based on water level
-    const alertLevel = await calculateAlertLevel(waterLevelValue);
+    const alertLevel = await calculateAlertLevel(waterDepth);
 
     const record = await prisma.waterMonitoring.create({
       data: {
-        waterLevel: waterLevelValue,
+        waterLevel: waterDepth,
         waterLevelUnit: waterLevelUnit || 'cm',
         alertLevel: alertLevel,
         :  || 'None',
@@ -186,9 +190,12 @@ exports.updateWaterMonitoring = async (req, res) => {
 
     // If water level is updated, recalculate alert level
     if (waterLevel !== undefined) {
-      const waterLevelValue = parseFloat(waterLevel);
-      updateData.waterLevel = waterLevelValue;
-      updateData.alertLevel = await calculateAlertLevel(waterLevelValue);
+      const TANK_HEIGHT = 100;
+      const distance = parseFloat(waterLevel);
+      const waterDepth = TANK_HEIGHT - distance;
+      
+      updateData.waterLevel = waterDepth;
+      updateData.alertLevel = await calculateAlertLevel(waterDepth);
     }
 
     if (waterLevelUnit !== undefined) updateData.waterLevelUnit = waterLevelUnit;
