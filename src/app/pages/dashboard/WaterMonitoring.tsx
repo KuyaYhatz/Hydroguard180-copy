@@ -395,7 +395,7 @@ export function WaterMonitoring() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Time</TableHead>
-                <TableHead>Water Level</TableHead>
+                <TableHead>Water Distance</TableHead>
                 <TableHead>Alert Level</TableHead>
               </TableRow>
             </TableHeader>
